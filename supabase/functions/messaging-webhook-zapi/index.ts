@@ -240,10 +240,23 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  // Fetch channel and validate
+  // Fetch channel with business unit info for auto-create features
   const { data: channel, error: channelErr } = await supabase
     .from("messaging_channels")
-    .select("id, organization_id, business_unit_id, external_identifier, credentials, status")
+    .select(`
+      id,
+      organization_id,
+      business_unit_id,
+      external_identifier,
+      credentials,
+      status,
+      business_unit:business_units(
+        id,
+        name,
+        auto_create_deal,
+        default_board_id
+      )
+    `)
     .eq("id", channelId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -256,16 +269,23 @@ Deno.serve(async (req) => {
     return json(404, { error: "Canal não encontrado" });
   }
 
-  // Validate secret (optional - Z-API pode não enviar secret)
+  // Validate secret - if channel has a secret configured, it MUST be present and match
   const secretHeader = getSecretFromRequest(req);
   const channelSecret = (channel.credentials as Record<string, unknown>)?.webhookSecret;
 
-  if (channelSecret && secretHeader && String(channelSecret) !== String(secretHeader)) {
-    return json(401, { error: "Secret inválido" });
+  if (channelSecret) {
+    if (!secretHeader) {
+      return json(401, { error: "Secret ausente" });
+    }
+    if (String(channelSecret) !== String(secretHeader)) {
+      return json(401, { error: "Secret inválido" });
+    }
   }
 
-  // Log webhook event for audit
-  const externalEventId = payload.messageId || payload.zapiMessageId || `${Date.now()}`;
+  // Generate stable event ID for deduplication
+  // For status updates: status_{ids[0]}_{status}
+  // For messages: msg_{messageId}
+  const externalEventId = generateStableEventId(payload);
 
   const { error: eventInsertErr } = await supabase
     .from("messaging_webhook_events")
@@ -277,8 +297,14 @@ Deno.serve(async (req) => {
       processed: false,
     });
 
-  // Ignore duplicate key errors (idempotency)
-  if (eventInsertErr && !eventInsertErr.message.toLowerCase().includes("duplicate")) {
+  // If duplicate (already processed), return early with success
+  if (eventInsertErr?.message?.toLowerCase().includes("duplicate")) {
+    console.log(`[Webhook] Duplicate event ignored: ${externalEventId}`);
+    return json(200, { ok: true, duplicate: true, event_id: externalEventId });
+  }
+
+  // Log other errors but continue
+  if (eventInsertErr) {
     console.error("Error logging webhook event:", eventInsertErr);
   }
 
@@ -317,7 +343,9 @@ Deno.serve(async (req) => {
       .eq("channel_id", channelId)
       .eq("external_event_id", externalEventId);
 
-    return json(500, {
+    // Return 200 to prevent Z-API from retrying on processing errors
+    return json(200, {
+      ok: false,
       error: "Erro ao processar webhook",
       details: error instanceof Error ? error.message : "Unknown error",
     });
@@ -327,6 +355,30 @@ Deno.serve(async (req) => {
 // =============================================================================
 // EVENT HANDLERS
 // =============================================================================
+
+/**
+ * Generate stable event ID for deduplication.
+ * Uses payload data instead of timestamps to ensure idempotency.
+ */
+function generateStableEventId(payload: ZApiWebhookPayload): string {
+  // For status updates: status_{firstId}_{status}
+  if (payload.status && payload.ids?.length) {
+    return `status_${payload.ids[0]}_${payload.status}`;
+  }
+
+  // For messages: msg_{messageId}
+  if (payload.messageId || payload.zapiMessageId) {
+    return `msg_${payload.messageId || payload.zapiMessageId}`;
+  }
+
+  // Fallback: use a stable fingerprint from the payload content
+  const raw = JSON.stringify(payload);
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    hash = ((hash << 5) - hash + raw.charCodeAt(i)) | 0;
+  }
+  return `zapi_${payload.phone || "unknown"}_${(hash >>> 0).toString(36)}`;
+}
 
 function determineEventType(payload: ZApiWebhookPayload): string {
   if (payload.error || payload.errorMessage) return "error";
@@ -343,6 +395,12 @@ async function handleInboundMessage(
     organization_id: string;
     business_unit_id: string;
     external_identifier: string;
+    business_unit?: {
+      id: string;
+      name: string;
+      auto_create_deal: boolean;
+      default_board_id: string | null;
+    } | null;
   },
   payload: ZApiWebhookPayload
 ) {
@@ -366,12 +424,17 @@ async function handleInboundMessage(
   if (convFindErr) throw convFindErr;
 
   let conversationId: string;
+  let contactId: string | null = null;
+  let isNewConversation = false;
 
   if (existingConv) {
     conversationId = existingConv.id;
+    contactId = existingConv.contact_id;
   } else {
+    isNewConversation = true;
+
     // Try to find existing contact by phone
-    const { data: contact } = await supabase
+    const { data: existingContact } = await supabase
       .from("contacts")
       .select("id")
       .eq("organization_id", channel.organization_id)
@@ -379,7 +442,41 @@ async function handleInboundMessage(
       .is("deleted_at", null)
       .maybeSingle();
 
-    // Create new conversation
+    if (existingContact) {
+      contactId = existingContact.id;
+    } else {
+      // AUTO-CREATE CONTACT (default behavior)
+      // Use WhatsApp name or phone as contact name
+      const contactName = payload.senderName || phone;
+
+      const { data: newContact, error: contactCreateErr } = await supabase
+        .from("contacts")
+        .insert({
+          organization_id: channel.organization_id,
+          name: contactName,
+          phone: phone,
+          source: "whatsapp", // Track that this contact came from WhatsApp
+          metadata: {
+            auto_created: true,
+            created_from: "messaging_webhook",
+            whatsapp_name: payload.senderName,
+            whatsapp_avatar: payload.senderPhoto,
+            business_unit_id: channel.business_unit_id,
+          },
+        })
+        .select("id")
+        .single();
+
+      if (contactCreateErr) {
+        console.error("Error auto-creating contact:", contactCreateErr);
+        // Continue without contact if creation fails
+      } else {
+        contactId = newContact.id;
+        console.log(`[Webhook] Auto-created contact: ${contactId} for phone ${phone}`);
+      }
+    }
+
+    // Create new conversation (always linked to contact now)
     const { data: newConv, error: convCreateErr } = await supabase
       .from("messaging_conversations")
       .insert({
@@ -389,7 +486,7 @@ async function handleInboundMessage(
         external_contact_id: phone,
         external_contact_name: payload.senderName || phone,
         external_contact_avatar: payload.senderPhoto,
-        contact_id: contact?.id || null,
+        contact_id: contactId,
         status: "open",
         priority: "normal",
         // WhatsApp 24h window starts when customer sends message
@@ -400,6 +497,19 @@ async function handleInboundMessage(
 
     if (convCreateErr) throw convCreateErr;
     conversationId = newConv.id;
+
+    // AUTO-CREATE DEAL if enabled on Business Unit
+    const bu = channel.business_unit;
+    if (bu?.auto_create_deal && bu.default_board_id && contactId) {
+      await autoCreateDeal(supabase, {
+        organizationId: channel.organization_id,
+        contactId,
+        boardId: bu.default_board_id,
+        conversationId,
+        contactName: payload.senderName || phone,
+        businessUnitName: bu.name,
+      });
+    }
   }
 
   // Insert message
@@ -441,6 +551,89 @@ async function handleInboundMessage(
     .eq("id", conversationId);
 }
 
+/**
+ * Auto-create a deal in the default board when a new conversation starts.
+ * Only called if business_unit.auto_create_deal is true.
+ */
+async function autoCreateDeal(
+  supabase: ReturnType<typeof createClient>,
+  params: {
+    organizationId: string;
+    contactId: string;
+    boardId: string;
+    conversationId: string;
+    contactName: string;
+    businessUnitName: string;
+  }
+) {
+  try {
+    // Get the first stage of the board (entry point)
+    const { data: firstStage, error: stageErr } = await supabase
+      .from("stages")
+      .select("id")
+      .eq("board_id", params.boardId)
+      .order("position", { ascending: true })
+      .limit(1)
+      .single();
+
+    if (stageErr || !firstStage) {
+      console.error("[Webhook] Could not find first stage for auto-create deal:", stageErr);
+      return;
+    }
+
+    // Create the deal
+    const dealTitle = `${params.contactName} - WhatsApp`;
+
+    const { data: newDeal, error: dealErr } = await supabase
+      .from("deals")
+      .insert({
+        organization_id: params.organizationId,
+        board_id: params.boardId,
+        stage_id: firstStage.id,
+        contact_id: params.contactId,
+        title: dealTitle,
+        value: 0,
+        source: "whatsapp",
+        metadata: {
+          auto_created: true,
+          created_from: "messaging_webhook",
+          conversation_id: params.conversationId,
+          business_unit: params.businessUnitName,
+        },
+      })
+      .select("id")
+      .single();
+
+    if (dealErr) {
+      console.error("[Webhook] Error auto-creating deal:", dealErr);
+      return;
+    }
+
+    console.log(`[Webhook] Auto-created deal: ${newDeal.id} for contact ${params.contactId}`);
+
+    // Update conversation with deal reference - merge with existing metadata
+    const { data: conv } = await supabase
+      .from("messaging_conversations")
+      .select("metadata")
+      .eq("id", params.conversationId)
+      .maybeSingle();
+
+    await supabase
+      .from("messaging_conversations")
+      .update({
+        metadata: {
+          ...((conv?.metadata as Record<string, unknown>) || {}),
+          deal_id: newDeal.id,
+          auto_created_deal: true,
+        },
+      })
+      .eq("id", params.conversationId);
+
+  } catch (error) {
+    console.error("[Webhook] Unexpected error in autoCreateDeal:", error);
+  }
+}
+
 async function handleOutboundConfirmation(
   supabase: ReturnType<typeof createClient>,
   channel: { id: string },
@@ -466,26 +659,39 @@ async function handleStatusUpdate(
   channel: { id: string },
   payload: ZApiWebhookPayload
 ) {
-  const statusMap: Record<string, { status: string; field: string }> = {
-    SENT: { status: "sent", field: "sent_at" },
-    DELIVERED: { status: "delivered", field: "delivered_at" },
-    READ: { status: "read", field: "read_at" },
-    PLAYED: { status: "read", field: "read_at" },
+  // Map Z-API status to our status
+  const statusMap: Record<string, string> = {
+    SENT: "sent",
+    DELIVERED: "delivered",
+    READ: "read",
+    PLAYED: "read",
   };
 
-  const mapping = statusMap[payload.status || ""];
-  if (!mapping) return;
+  const newStatus = statusMap[payload.status || ""];
+  if (!newStatus) return;
 
-  const now = new Date().toISOString();
+  const timestamp = new Date().toISOString();
 
-  // Update all affected messages
+  // Update all affected messages using RPC for atomic, idempotent updates
   for (const externalId of payload.ids || []) {
-    await supabase
-      .from("messaging_messages")
-      .update({
-        status: mapping.status,
-        [mapping.field]: now,
-      })
-      .eq("external_id", externalId);
+    const { data: result, error } = await supabase.rpc("update_message_status_if_newer", {
+      p_external_id: externalId,
+      p_new_status: newStatus,
+      p_timestamp: timestamp,
+      p_error_code: null,
+      p_error_message: null,
+    });
+
+    if (error) {
+      console.error(`[Webhook] Status update RPC error for ${externalId}:`, error);
+      continue;
+    }
+
+    // Log result for debugging
+    if (result?.updated) {
+      console.log(`[Webhook] Status updated: ${externalId} → ${newStatus}`);
+    } else {
+      console.log(`[Webhook] Status skipped (${result?.reason}): ${externalId} → ${newStatus}`);
+    }
   }
 }

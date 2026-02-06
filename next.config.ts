@@ -1,4 +1,8 @@
+import path from "path";
+import { fileURLToPath } from "url";
 import type { NextConfig } from "next";
+
+const configDir = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   // Otimiza imports de bibliotecas com barrel files (index.js que re-exporta tudo)
@@ -13,7 +17,7 @@ const nextConfig: NextConfig = {
     ],
   },
   turbopack: {
-    root: process.cwd(),
+    root: configDir,
   },
   async headers() {
     return [

@@ -280,8 +280,13 @@ async function verifySignature(
     const hashArray = Array.from(new Uint8Array(signatureBuffer));
     const computedHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
-    // Constant-time comparison
-    return computedHash === expectedHash;
+    // Constant-time comparison to prevent timing attacks
+    if (computedHash.length !== expectedHash.length) return false;
+    let mismatch = 0;
+    for (let i = 0; i < computedHash.length; i++) {
+      mismatch |= computedHash.charCodeAt(i) ^ expectedHash.charCodeAt(i);
+    }
+    return mismatch === 0;
   } catch (error) {
     console.error("Signature verification error:", error);
     return false;
@@ -317,10 +322,23 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  // Fetch channel
+  // Fetch channel with business unit info for auto-create features
   const { data: channel, error: channelErr } = await supabase
     .from("messaging_channels")
-    .select("id, organization_id, business_unit_id, external_identifier, credentials, status")
+    .select(`
+      id,
+      organization_id,
+      business_unit_id,
+      external_identifier,
+      credentials,
+      status,
+      business_unit:business_units(
+        id,
+        name,
+        auto_create_deal,
+        default_board_id
+      )
+    `)
     .eq("id", channelId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -368,16 +386,22 @@ Deno.serve(async (req) => {
   // Get raw body for signature verification
   const rawBody = await req.text();
 
-  // Verify signature if app secret is configured
+  // Verify signature - mandatory when appSecret is configured
   const appSecret = credentials?.appSecret as string | undefined;
   const signature = req.headers.get("X-Hub-Signature-256") || "";
 
-  if (appSecret && signature) {
+  if (appSecret) {
+    if (!signature) {
+      console.error("Missing X-Hub-Signature-256 header with appSecret configured");
+      return json(401, { error: "Missing signature" });
+    }
     const isValid = await verifySignature(rawBody, signature, appSecret);
     if (!isValid) {
       console.error("Invalid webhook signature");
       return json(401, { error: "Invalid signature" });
     }
+  } else {
+    console.warn("[Webhook] appSecret not configured for channel, signature verification skipped");
   }
 
   // Parse payload
@@ -397,8 +421,11 @@ Deno.serve(async (req) => {
   const change = payload.entry[0].changes[0];
   const value = change.value;
 
-  // Log webhook event for audit
-  const externalEventId = `meta_${payload.entry[0].id}_${Date.now()}`;
+  // Generate stable event ID for deduplication
+  // For status updates: status_{wamid}_{status}
+  // For messages: msg_{wamid}
+  // For others: meta_{entry_id}_{timestamp}
+  const externalEventId = generateStableEventId(payload, value);
 
   const { error: eventInsertErr } = await supabase
     .from("messaging_webhook_events")
@@ -410,8 +437,14 @@ Deno.serve(async (req) => {
       processed: false,
     });
 
-  // Ignore duplicate key errors (idempotency)
-  if (eventInsertErr && !eventInsertErr.message.toLowerCase().includes("duplicate")) {
+  // If duplicate (already processed), return early with success
+  if (eventInsertErr?.message?.toLowerCase().includes("duplicate")) {
+    console.log(`[Webhook] Duplicate event ignored: ${externalEventId}`);
+    return json(200, { ok: true, duplicate: true, event_id: externalEventId });
+  }
+
+  // Log other errors but continue
+  if (eventInsertErr) {
     console.error("Error logging webhook event:", eventInsertErr);
   }
 
@@ -472,6 +505,34 @@ Deno.serve(async (req) => {
 // EVENT HANDLERS
 // =============================================================================
 
+/**
+ * Generate stable event ID for deduplication.
+ * Uses payload data instead of timestamps to ensure idempotency.
+ */
+function generateStableEventId(
+  payload: MetaCloudWebhookPayload,
+  value: MetaWebhookValue
+): string {
+  // For status updates: status_{wamid}_{status}
+  if (value.statuses?.[0]) {
+    const status = value.statuses[0];
+    return `status_${status.id}_${status.status}`;
+  }
+
+  // For messages: msg_{wamid}
+  if (value.messages?.[0]) {
+    return `msg_${value.messages[0].id}`;
+  }
+
+  // For errors: error_{entry_id}_{error_code}
+  if (value.errors?.[0]) {
+    return `error_${payload.entry[0].id}_${value.errors[0].code}`;
+  }
+
+  // Fallback: meta_{entry_id}_{phone_number_id}
+  return `meta_${payload.entry[0].id}_${value.metadata?.phone_number_id || "unknown"}`;
+}
+
 function determineEventType(value: MetaWebhookValue): string {
   if (value.errors?.[0]) return "error";
   if (value.statuses?.[0]) return "status_update";
@@ -486,6 +547,12 @@ async function handleInboundMessage(
     organization_id: string;
     business_unit_id: string;
     external_identifier: string;
+    business_unit?: {
+      id: string;
+      name: string;
+      auto_create_deal: boolean;
+      default_board_id: string | null;
+    } | null;
   },
   message: MetaWebhookMessage,
   contact?: MetaWebhookContact
@@ -509,12 +576,14 @@ async function handleInboundMessage(
   if (convFindErr) throw convFindErr;
 
   let conversationId: string;
+  let contactId: string | null = null;
 
   if (existingConv) {
     conversationId = existingConv.id;
+    contactId = existingConv.contact_id;
   } else {
     // Try to find existing contact by phone
-    const { data: crmContact } = await supabase
+    const { data: existingContact } = await supabase
       .from("contacts")
       .select("id")
       .eq("organization_id", channel.organization_id)
@@ -522,7 +591,38 @@ async function handleInboundMessage(
       .is("deleted_at", null)
       .maybeSingle();
 
-    // Create new conversation
+    if (existingContact) {
+      contactId = existingContact.id;
+    } else {
+      // AUTO-CREATE CONTACT (default behavior)
+      const contactName = senderName || phone;
+
+      const { data: newContact, error: contactCreateErr } = await supabase
+        .from("contacts")
+        .insert({
+          organization_id: channel.organization_id,
+          name: contactName,
+          phone: phone,
+          source: "whatsapp",
+          metadata: {
+            auto_created: true,
+            created_from: "messaging_webhook",
+            whatsapp_name: senderName,
+            business_unit_id: channel.business_unit_id,
+          },
+        })
+        .select("id")
+        .single();
+
+      if (contactCreateErr) {
+        console.error("Error auto-creating contact:", contactCreateErr);
+      } else {
+        contactId = newContact.id;
+        console.log(`[Webhook] Auto-created contact: ${contactId} for phone ${phone}`);
+      }
+    }
+
+    // Create new conversation (always linked to contact now)
     const { data: newConv, error: convCreateErr } = await supabase
       .from("messaging_conversations")
       .insert({
@@ -531,7 +631,7 @@ async function handleInboundMessage(
         business_unit_id: channel.business_unit_id,
         external_contact_id: phone,
         external_contact_name: senderName || phone,
-        contact_id: crmContact?.id || null,
+        contact_id: contactId,
         status: "open",
         priority: "normal",
         // WhatsApp 24h window starts when customer sends message
@@ -542,6 +642,19 @@ async function handleInboundMessage(
 
     if (convCreateErr) throw convCreateErr;
     conversationId = newConv.id;
+
+    // AUTO-CREATE DEAL if enabled on Business Unit
+    const bu = channel.business_unit;
+    if (bu?.auto_create_deal && bu.default_board_id && contactId) {
+      await autoCreateDeal(supabase, {
+        organizationId: channel.organization_id,
+        contactId,
+        boardId: bu.default_board_id,
+        conversationId,
+        contactName: senderName || phone,
+        businessUnitName: bu.name,
+      });
+    }
   }
 
   // Insert message
@@ -586,46 +699,137 @@ async function handleInboundMessage(
     .eq("id", conversationId);
 }
 
+/**
+ * Auto-create a deal in the default board when a new conversation starts.
+ * Only called if business_unit.auto_create_deal is true.
+ */
+async function autoCreateDeal(
+  supabase: ReturnType<typeof createClient>,
+  params: {
+    organizationId: string;
+    contactId: string;
+    boardId: string;
+    conversationId: string;
+    contactName: string;
+    businessUnitName: string;
+  }
+) {
+  try {
+    // Get the first stage of the board (entry point)
+    const { data: firstStage, error: stageErr } = await supabase
+      .from("stages")
+      .select("id")
+      .eq("board_id", params.boardId)
+      .order("position", { ascending: true })
+      .limit(1)
+      .single();
+
+    if (stageErr || !firstStage) {
+      console.error("[Webhook] Could not find first stage for auto-create deal:", stageErr);
+      return;
+    }
+
+    // Create the deal
+    const dealTitle = `${params.contactName} - WhatsApp`;
+
+    const { data: newDeal, error: dealErr } = await supabase
+      .from("deals")
+      .insert({
+        organization_id: params.organizationId,
+        board_id: params.boardId,
+        stage_id: firstStage.id,
+        contact_id: params.contactId,
+        title: dealTitle,
+        value: 0,
+        source: "whatsapp",
+        metadata: {
+          auto_created: true,
+          created_from: "messaging_webhook",
+          conversation_id: params.conversationId,
+          business_unit: params.businessUnitName,
+        },
+      })
+      .select("id")
+      .single();
+
+    if (dealErr) {
+      console.error("[Webhook] Error auto-creating deal:", dealErr);
+      return;
+    }
+
+    console.log(`[Webhook] Auto-created deal: ${newDeal.id} for contact ${params.contactId}`);
+
+    // Update conversation with deal reference - merge with existing metadata
+    const { data: conv } = await supabase
+      .from("messaging_conversations")
+      .select("metadata")
+      .eq("id", params.conversationId)
+      .maybeSingle();
+
+    await supabase
+      .from("messaging_conversations")
+      .update({
+        metadata: {
+          ...((conv?.metadata as Record<string, unknown>) || {}),
+          deal_id: newDeal.id,
+          auto_created_deal: true,
+        },
+      })
+      .eq("id", params.conversationId);
+
+  } catch (error) {
+    console.error("[Webhook] Unexpected error in autoCreateDeal:", error);
+  }
+}
+
 async function handleStatusUpdate(
   supabase: ReturnType<typeof createClient>,
   channel: { id: string },
   status: MetaWebhookStatus
 ) {
-  const statusMap: Record<string, { status: string; field: string }> = {
-    sent: { status: "sent", field: "sent_at" },
-    delivered: { status: "delivered", field: "delivered_at" },
-    read: { status: "read", field: "read_at" },
-    failed: { status: "failed", field: "failed_at" },
-  };
-
-  const mapping = statusMap[status.status];
-  if (!mapping) return;
+  const validStatuses = ["sent", "delivered", "read", "failed"];
+  if (!validStatuses.includes(status.status)) return;
 
   const timestamp = new Date(parseInt(status.timestamp) * 1000).toISOString();
 
-  // Update message
-  const updateData: Record<string, unknown> = {
-    status: mapping.status,
-    [mapping.field]: timestamp,
-  };
+  // Use RPC for atomic, idempotent status update
+  // This prevents duplicate updates and ensures status only advances
+  const errorCode = status.status === "failed" && status.errors?.[0]
+    ? String(status.errors[0].code)
+    : null;
+  const errorMessage = status.status === "failed" && status.errors?.[0]
+    ? (status.errors[0].title || status.errors[0].message)
+    : null;
 
-  // Add error info if failed
-  if (status.status === "failed" && status.errors?.[0]) {
-    updateData.error_code = String(status.errors[0].code);
-    updateData.error_message = status.errors[0].title || status.errors[0].message;
+  const { data: result, error } = await supabase.rpc("update_message_status_if_newer", {
+    p_external_id: status.id,
+    p_new_status: status.status,
+    p_timestamp: timestamp,
+    p_error_code: errorCode,
+    p_error_message: errorMessage,
+  });
+
+  if (error) {
+    console.error("[Webhook] Status update RPC error:", error);
+    return;
+  }
+
+  // Log result for debugging
+  if (result?.updated) {
+    console.log(`[Webhook] Status updated: ${status.id} → ${status.status}`);
+  } else {
+    console.log(`[Webhook] Status skipped (${result?.reason}): ${status.id} → ${status.status}`);
   }
 
   // Update window expiration if conversation info is present
-  if (status.conversation?.expiration_timestamp) {
-    // Meta sends expiration timestamp for conversation window
-    // Update the conversation's window_expires_at
+  if (status.conversation?.expiration_timestamp && result?.message_id) {
     const expirationTime = new Date(parseInt(status.conversation.expiration_timestamp) * 1000);
 
-    // Find conversation by phone and update window
+    // Find conversation by message and update window
     const { data: msg } = await supabase
       .from("messaging_messages")
       .select("conversation_id")
-      .eq("external_id", status.id)
+      .eq("id", result.message_id)
       .maybeSingle();
 
     if (msg?.conversation_id) {
@@ -635,11 +839,6 @@ async function handleStatusUpdate(
         .eq("id", msg.conversation_id);
     }
   }
-
-  await supabase
-    .from("messaging_messages")
-    .update(updateData)
-    .eq("external_id", status.id);
 }
 
 async function findMessageByExternalId(

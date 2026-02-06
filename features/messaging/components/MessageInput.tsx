@@ -1,196 +1,132 @@
 'use client';
 
-import React, { useState, useRef, useCallback, KeyboardEvent } from 'react';
-import { Send, Paperclip, Smile, X, Loader2, Clock, AlertTriangle } from 'lucide-react';
+import React, { useState, useRef, useCallback } from 'react';
+import { Send, Paperclip, Smile, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { MessageContent, TextContent } from '@/lib/messaging/types';
-
-// =============================================================================
-// TYPES
-// =============================================================================
+import { useSendTextMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
+import type { ConversationView } from '@/lib/messaging/types';
 
 interface MessageInputProps {
-  onSend: (content: MessageContent) => Promise<void>;
-  disabled?: boolean;
-  placeholder?: string;
-  windowExpired?: boolean;
-  windowExpiresAt?: string;
-  className?: string;
+  conversation: ConversationView;
 }
 
-// =============================================================================
-// COMPONENT
-// =============================================================================
-
-export function MessageInput({
-  onSend,
-  disabled = false,
-  placeholder = 'Digite uma mensagem...',
-  windowExpired = false,
-  windowExpiresAt,
-  className,
-}: MessageInputProps) {
+export function MessageInput({ conversation }: MessageInputProps) {
   const [text, setText] = useState('');
-  const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { mutate: sendMessage, isPending } = useSendTextMessage();
 
-  // Calculate remaining window time
-  const windowTimeRemaining = windowExpiresAt
-    ? Math.max(0, Math.floor((new Date(windowExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60)))
-    : null;
+  const isDisabled = conversation.isWindowExpired || isPending;
 
-  // Auto-resize textarea
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
+  const handleSubmit = useCallback((e?: React.FormEvent) => {
+    e?.preventDefault();
 
-    // Auto-resize
-    const textarea = e.target;
-    textarea.style.height = 'auto';
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
-  };
-
-  // Handle send
-  const handleSend = useCallback(async () => {
     const trimmedText = text.trim();
-    if (!trimmedText || isSending || disabled || windowExpired) return;
+    if (!trimmedText || isDisabled) return;
 
-    const content: TextContent = {
-      type: 'text',
-      text: trimmedText,
-    };
-
-    setIsSending(true);
-
-    try {
-      await onSend(content);
-      setText('');
-      // Reset textarea height
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
+    sendMessage(
+      { conversationId: conversation.id, text: trimmedText },
+      {
+        onSuccess: () => {
+          setText('');
+          textareaRef.current?.focus();
+        },
       }
-    } catch (error) {
-      console.error('Failed to send message:', error);
-    } finally {
-      setIsSending(false);
-    }
-  }, [text, isSending, disabled, windowExpired, onSend]);
+    );
+  }, [text, isDisabled, sendMessage, conversation.id]);
 
-  // Handle keyboard shortcuts
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Send on Enter (without Shift)
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      handleSubmit();
     }
-  };
+  }, [handleSubmit]);
 
-  const canSend = text.trim().length > 0 && !isSending && !disabled && !windowExpired;
+  const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const textarea = e.target;
+    setText(textarea.value);
+    textarea.style.height = 'auto';
+    const newHeight = Math.min(textarea.scrollHeight, 120);
+    textarea.style.height = newHeight + 'px';
+  }, []);
+
+  if (conversation.isWindowExpired) {
+    return (
+      <div className="p-4 border-t border-slate-200 dark:border-white/10 bg-orange-50 dark:bg-orange-900/20">
+        <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
+          <Clock className="w-5 h-5" />
+          <div>
+            <p className="font-medium">Janela de resposta expirada</p>
+            <p className="text-sm opacity-80">
+              Use um template aprovado para reabrir a conversa
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="mt-3 px-4 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+        >
+          Enviar template
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className={cn('border-t border-[var(--color-border)]', className)}>
-      {/* Window expiry warning */}
-      {windowExpired && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-[var(--color-error-bg)] text-[var(--color-error-text)]">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span className="text-sm">
-            Janela de resposta expirada. Use um template para reabrir a conversa.
-          </span>
-        </div>
-      )}
-
-      {windowTimeRemaining !== null && windowTimeRemaining > 0 && windowTimeRemaining <= 4 && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]">
-          <Clock className="w-4 h-4 shrink-0" />
-          <span className="text-sm">
-            Janela de resposta expira em {windowTimeRemaining}h
-          </span>
-        </div>
-      )}
-
-      {/* Input area */}
-      <div className="p-3">
-        <div
-          className={cn(
-            'flex items-end gap-2 p-2 rounded-xl',
-            'bg-[var(--color-muted)] border border-transparent',
-            'focus-within:border-[var(--color-border)] focus-within:bg-[var(--color-surface)]',
-            'transition-colors',
-            (disabled || windowExpired) && 'opacity-50'
-          )}
+    <form
+      onSubmit={handleSubmit}
+      className="p-4 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
+    >
+      <div className="flex items-end gap-2">
+        <button
+          type="button"
+          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+          title="Anexar arquivo"
         >
-          {/* Attachment button (placeholder for future) */}
-          <button
-            type="button"
-            disabled={disabled || windowExpired}
-            className={cn(
-              'p-2 rounded-lg transition-colors shrink-0',
-              'hover:bg-[var(--color-border)] disabled:opacity-50 disabled:cursor-not-allowed',
-              'text-[var(--color-text-muted)]'
-            )}
-            title="Anexar arquivo (em breve)"
-          >
-            <Paperclip className="w-5 h-5" />
-          </button>
+          <Paperclip className="w-5 h-5" />
+        </button>
 
-          {/* Text input */}
+        <div className="flex-1 relative">
           <textarea
             ref={textareaRef}
             value={text}
-            onChange={handleTextChange}
+            onChange={handleInput}
             onKeyDown={handleKeyDown}
-            placeholder={windowExpired ? 'Janela expirada' : placeholder}
-            disabled={disabled || windowExpired}
+            placeholder="Digite uma mensagem..."
+            disabled={isDisabled}
             rows={1}
             className={cn(
-              'flex-1 resize-none bg-transparent',
-              'text-sm text-[var(--color-text-primary)]',
-              'placeholder:text-[var(--color-text-muted)]',
-              'focus:outline-none',
-              'disabled:cursor-not-allowed',
-              'max-h-[150px]'
+              'w-full px-4 py-2.5 text-sm resize-none',
+              'bg-slate-100 dark:bg-white/5 border border-transparent rounded-2xl',
+              'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
+              'text-slate-900 dark:text-white placeholder-slate-400',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'max-h-[120px]'
             )}
+            style={{ height: 'auto', minHeight: '40px' }}
           />
-
-          {/* Emoji button (placeholder for future) */}
-          <button
-            type="button"
-            disabled={disabled || windowExpired}
-            className={cn(
-              'p-2 rounded-lg transition-colors shrink-0',
-              'hover:bg-[var(--color-border)] disabled:opacity-50 disabled:cursor-not-allowed',
-              'text-[var(--color-text-muted)]'
-            )}
-            title="Emojis (em breve)"
-          >
-            <Smile className="w-5 h-5" />
-          </button>
-
-          {/* Send button */}
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!canSend}
-            className={cn(
-              'p-2 rounded-lg transition-colors shrink-0',
-              canSend
-                ? 'bg-[var(--bubble-outbound-bg)] text-white hover:opacity-90'
-                : 'bg-[var(--color-border)] text-[var(--color-text-muted)] cursor-not-allowed'
-            )}
-            title="Enviar (Enter)"
-          >
-            {isSending ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
-          </button>
         </div>
 
-        {/* Help text */}
-        <p className="text-xs text-[var(--color-text-subtle)] mt-1.5 px-2">
-          Pressione <kbd className="px-1 py-0.5 rounded bg-[var(--color-muted)] text-[var(--color-text-muted)]">Enter</kbd> para enviar, <kbd className="px-1 py-0.5 rounded bg-[var(--color-muted)] text-[var(--color-text-muted)]">Shift+Enter</kbd> para nova linha
-        </p>
+        <button
+          type="button"
+          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+          title="Emojis"
+        >
+          <Smile className="w-5 h-5" />
+        </button>
+
+        <button
+          type="submit"
+          disabled={!text.trim() || isDisabled}
+          className={cn(
+            'p-2.5 rounded-full transition-colors',
+            text.trim() && !isDisabled
+              ? 'bg-primary-500 hover:bg-primary-600 text-white'
+              : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
+          )}
+        >
+          <Send className="w-5 h-5" />
+        </button>
       </div>
-    </div>
+    </form>
   );
 }

@@ -181,10 +181,7 @@ export const MessagingProvider: React.FC<MessagingProviderProps> = ({
 
   const sendMessage = useCallback(
     async (text: string, replyToMessageId?: string) => {
-      if (!activeConversationId) {
-        console.error('[MessagingContext] No active conversation');
-        return;
-      }
+      if (!activeConversationId) return;
 
       await sendTextMessageMutation.mutateAsync({
         conversationId: activeConversationId,

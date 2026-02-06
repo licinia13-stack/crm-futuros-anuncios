@@ -2,311 +2,183 @@
 
 import React, { memo } from 'react';
 import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import {
-  Check,
-  CheckCheck,
-  Clock,
-  AlertCircle,
-  FileText,
-  Image as ImageIcon,
-  Play,
-  Mic,
-  MapPin,
-  User,
-  Download,
-} from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, Image, FileText, MapPin, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type {
-  MessageContent,
-  MessageStatus,
-  MessageDirection,
-  TextContent,
-  ImageContent,
-  VideoContent,
-  AudioContent,
-  DocumentContent,
-  LocationContent,
-} from '@/lib/messaging/types';
-
-// =============================================================================
-// TYPES
-// =============================================================================
-
-export interface MessageBubbleData {
-  id: string;
-  direction: MessageDirection;
-  contentType: string;
-  content: MessageContent;
-  status: MessageStatus;
-  createdAt: string;
-  senderName?: string;
-  senderProfileUrl?: string;
-  errorMessage?: string;
-}
+import { sanitizeUrl } from '@/lib/utils/sanitize';
+import type { MessagingMessage, MessageStatus, TextContent, ImageContent, DocumentContent, LocationContent } from '@/lib/messaging/types';
 
 interface MessageBubbleProps {
-  message: MessageBubbleData;
-  showSender?: boolean;
+  message: MessagingMessage;
 }
 
-// =============================================================================
-// STATUS ICON
-// =============================================================================
-
-function StatusIcon({ status }: { status: MessageStatus }) {
+const StatusIcon = memo(function StatusIcon({ status }: { status: MessageStatus }) {
   switch (status) {
     case 'pending':
-      return <Clock className="w-3.5 h-3.5 text-[var(--msg-status-pending)]" />;
+      return <Clock className="w-3 h-3 text-slate-400" />;
+    case 'queued':
+      return <Clock className="w-3 h-3 text-slate-400" />;
     case 'sent':
-      return <Check className="w-3.5 h-3.5 text-[var(--msg-status-sent)]" />;
+      return <Check className="w-3 h-3 text-slate-400" />;
     case 'delivered':
-      return <CheckCheck className="w-3.5 h-3.5 text-[var(--msg-status-delivered)]" />;
+      return <CheckCheck className="w-3 h-3 text-slate-400" />;
     case 'read':
-      return <CheckCheck className="w-3.5 h-3.5 text-[var(--msg-status-read)]" />;
+      return <CheckCheck className="w-3 h-3 text-blue-500" />;
     case 'failed':
-      return <AlertCircle className="w-3.5 h-3.5 text-[var(--msg-status-failed)]" />;
+      return <AlertCircle className="w-3 h-3 text-red-500" />;
     default:
       return null;
   }
-}
+});
 
-// =============================================================================
-// CONTENT RENDERERS
-// =============================================================================
+const MessageContent = memo(function MessageContent({ message }: { message: MessagingMessage }) {
+  const { content, contentType } = message;
 
-function TextMessageContent({ content }: { content: TextContent }) {
-  return (
-    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-      {content.text}
-    </p>
-  );
-}
+  switch (contentType) {
+    case 'text': {
+      const textContent = content as TextContent;
+      return (
+        <p className="whitespace-pre-wrap break-words">{textContent.text}</p>
+      );
+    }
 
-function ImageMessageContent({ content, isOutbound }: { content: ImageContent; isOutbound: boolean }) {
-  return (
-    <div className="space-y-1">
-      <div className="relative rounded-lg overflow-hidden max-w-[280px]">
-        <img
-          src={content.mediaUrl}
-          alt={content.caption || 'Imagem'}
-          className="w-full h-auto max-h-[300px] object-cover"
-          loading="lazy"
-        />
-      </div>
-      {content.caption && (
-        <p className="text-sm whitespace-pre-wrap break-words">{content.caption}</p>
-      )}
-    </div>
-  );
-}
+    case 'image': {
+      const imageContent = content as ImageContent;
+      return (
+        <div className="space-y-1">
+          {sanitizeUrl(imageContent.mediaUrl) && (
+            <img
+              src={sanitizeUrl(imageContent.mediaUrl)}
+              alt={imageContent.caption || 'Imagem'}
+              className="max-w-[240px] rounded-lg"
+            />
+          )}
+          {imageContent.caption && (
+            <p className="whitespace-pre-wrap break-words">{imageContent.caption}</p>
+          )}
+        </div>
+      );
+    }
 
-function VideoMessageContent({ content }: { content: VideoContent }) {
-  return (
-    <div className="space-y-1">
-      <div className="relative rounded-lg overflow-hidden max-w-[280px] bg-black/10">
-        <video
-          src={content.mediaUrl}
-          controls
-          className="w-full h-auto max-h-[300px]"
-          preload="metadata"
-        />
-      </div>
-      {content.caption && (
-        <p className="text-sm whitespace-pre-wrap break-words">{content.caption}</p>
-      )}
-    </div>
-  );
-}
+    case 'document': {
+      const docContent = content as DocumentContent;
+      const safeDocUrl = sanitizeUrl(docContent.mediaUrl);
+      return safeDocUrl ? (
+        <a
+          href={safeDocUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 p-2 bg-black/5 dark:bg-white/5 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+        >
+          <FileText className="w-8 h-8 text-primary-500" />
+          <div className="min-w-0">
+            <p className="font-medium truncate">{docContent.fileName}</p>
+            {docContent.fileSize && (
+              <p className="text-xs opacity-70">
+                {(docContent.fileSize / 1024).toFixed(1)} KB
+              </p>
+            )}
+          </div>
+        </a>
+      ) : null;
+    }
 
-function AudioMessageContent({ content }: { content: AudioContent }) {
-  return (
-    <div className="flex items-center gap-3 min-w-[200px]">
-      <div className="w-10 h-10 rounded-full bg-[var(--color-muted)] flex items-center justify-center shrink-0">
-        <Mic className="w-5 h-5 text-[var(--color-text-muted)]" />
-      </div>
-      <audio
-        src={content.mediaUrl}
-        controls
-        className="flex-1 h-8"
-        preload="metadata"
-      />
-    </div>
-  );
-}
+    case 'location': {
+      const locContent = content as LocationContent;
+      return (
+        <a
+          href={`https://maps.google.com/?q=${locContent.latitude},${locContent.longitude}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 p-2 bg-black/5 dark:bg-white/5 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+        >
+          <MapPin className="w-6 h-6 text-red-500" />
+          <div>
+            {locContent.name && <p className="font-medium">{locContent.name}</p>}
+            {locContent.address && <p className="text-xs opacity-70">{locContent.address}</p>}
+          </div>
+        </a>
+      );
+    }
 
-function DocumentMessageContent({ content }: { content: DocumentContent }) {
-  return (
-    <a
-      href={content.mediaUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-3 p-2 rounded-lg bg-[var(--color-muted)]/50 hover:bg-[var(--color-muted)] transition-colors min-w-[200px]"
-    >
-      <div className="w-10 h-10 rounded-lg bg-[var(--color-info-bg)] flex items-center justify-center shrink-0">
-        <FileText className="w-5 h-5 text-[var(--color-info)]" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{content.fileName}</p>
-        {content.fileSize && (
-          <p className="text-xs text-[var(--color-text-muted)]">
-            {formatFileSize(content.fileSize)}
-          </p>
-        )}
-      </div>
-      <Download className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
-    </a>
-  );
-}
-
-function LocationMessageContent({ content }: { content: LocationContent }) {
-  const mapsUrl = `https://www.google.com/maps?q=${content.latitude},${content.longitude}`;
-
-  return (
-    <a
-      href={mapsUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-3 p-2 rounded-lg bg-[var(--color-muted)]/50 hover:bg-[var(--color-muted)] transition-colors"
-    >
-      <div className="w-10 h-10 rounded-lg bg-[var(--color-error-bg)] flex items-center justify-center shrink-0">
-        <MapPin className="w-5 h-5 text-[var(--color-error)]" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium">{content.name || 'Localização'}</p>
-        {content.address && (
-          <p className="text-xs text-[var(--color-text-muted)] truncate">
-            {content.address}
-          </p>
-        )}
-      </div>
-    </a>
-  );
-}
-
-function UnsupportedContent({ type }: { type: string }) {
-  return (
-    <div className="flex items-center gap-2 p-2 rounded-lg bg-[var(--color-muted)]/50 text-sm text-[var(--color-text-muted)]">
-      <AlertCircle className="w-4 h-4" />
-      <span>Tipo de mensagem não suportado: {type}</span>
-    </div>
-  );
-}
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function renderContent(content: MessageContent, isOutbound: boolean) {
-  switch (content.type) {
-    case 'text':
-      return <TextMessageContent content={content} />;
-    case 'image':
-      return <ImageMessageContent content={content} isOutbound={isOutbound} />;
-    case 'video':
-      return <VideoMessageContent content={content} />;
     case 'audio':
-      return <AudioMessageContent content={content} />;
-    case 'document':
-      return <DocumentMessageContent content={content} />;
-    case 'location':
-      return <LocationMessageContent content={content} />;
+      return (
+        <div className="flex items-center gap-2">
+          <Phone className="w-5 h-5" />
+          <span>Mensagem de áudio</span>
+        </div>
+      );
+
+    case 'video':
+      return (
+        <div className="flex items-center gap-2">
+          <Image className="w-5 h-5" />
+          <span>Vídeo</span>
+        </div>
+      );
+
     case 'sticker':
       return (
-        <img
-          src={(content as { mediaUrl: string }).mediaUrl}
-          alt="Sticker"
-          className="w-32 h-32 object-contain"
-        />
+        <div className="text-4xl">
+          {sanitizeUrl((content as any).mediaUrl) ? (
+            <img src={sanitizeUrl((content as any).mediaUrl)} alt="Sticker" className="w-24 h-24" />
+          ) : (
+            '🏷️'
+          )}
+        </div>
       );
+
     default:
-      return <UnsupportedContent type={content.type} />;
+      return <p className="italic opacity-70">[Tipo de mensagem não suportado]</p>;
   }
-}
+});
 
-// =============================================================================
-// COMPONENT
-// =============================================================================
-
-const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
-  message,
-  showSender = false,
-}) => {
-  const { direction, content, status, createdAt, senderName, errorMessage } = message;
-  const isOutbound = direction === 'outbound';
-
-  const time = format(new Date(createdAt), 'HH:mm', { locale: ptBR });
+export const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProps) {
+  const isOutbound = message.direction === 'outbound';
+  const time = format(new Date(message.createdAt), 'HH:mm');
 
   return (
     <div
       className={cn(
-        'flex gap-2 max-w-[80%]',
-        isOutbound ? 'ml-auto flex-row-reverse' : 'mr-auto'
+        'flex',
+        isOutbound ? 'justify-end' : 'justify-start'
       )}
     >
-      {/* Sender avatar (for inbound only) */}
-      {!isOutbound && showSender && (
-        <div className="shrink-0 mt-1">
-          <div className="w-8 h-8 rounded-full bg-[var(--color-muted)] flex items-center justify-center">
-            <User className="w-4 h-4 text-[var(--color-text-muted)]" />
-          </div>
-        </div>
-      )}
-
-      {/* Bubble */}
       <div
         className={cn(
-          'relative rounded-2xl px-3 py-2',
+          'max-w-[70%] rounded-2xl px-4 py-2 shadow-sm',
           isOutbound
-            ? 'bg-[var(--bubble-outbound-bg)] text-[var(--bubble-outbound-text)]'
-            : 'bg-[var(--bubble-inbound-bg)] border border-[var(--bubble-inbound-border)] text-[var(--color-text-primary)]',
-          // Rounded corners
-          isOutbound ? 'rounded-br-md' : 'rounded-bl-md'
+            ? 'bg-primary-500 text-white rounded-br-md'
+            : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-bl-md border border-slate-200 dark:border-slate-700'
         )}
       >
-        {/* Sender name (for inbound group messages) */}
-        {!isOutbound && showSender && senderName && (
-          <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-            {senderName}
+        {/* Sender name (for inbound) */}
+        {!isOutbound && message.senderName && (
+          <p className="text-xs font-medium text-primary-600 dark:text-primary-400 mb-1">
+            {message.senderName}
           </p>
         )}
 
         {/* Content */}
-        {renderContent(content, isOutbound)}
-
-        {/* Error message */}
-        {status === 'failed' && errorMessage && (
-          <p className="text-xs text-[var(--msg-status-failed)] mt-1">
-            {errorMessage}
-          </p>
-        )}
+        <div className="text-sm">
+          <MessageContent message={message} />
+        </div>
 
         {/* Time and status */}
         <div
           className={cn(
-            'flex items-center gap-1 mt-1',
-            isOutbound ? 'justify-end' : 'justify-start'
+            'flex items-center justify-end gap-1 mt-1',
+            isOutbound ? 'text-white/70' : 'text-slate-400'
           )}
         >
-          <span
-            className={cn(
-              'text-[10px]',
-              isOutbound ? 'text-white/70' : 'text-[var(--color-text-muted)]'
-            )}
-          >
-            {time}
-          </span>
-          {isOutbound && <StatusIcon status={status} />}
+          <span className="text-[10px]">{time}</span>
+          {isOutbound && <StatusIcon status={message.status} />}
         </div>
+
+        {/* Error message */}
+        {message.status === 'failed' && message.errorMessage && (
+          <p className="text-xs text-red-300 mt-1">{message.errorMessage}</p>
+        )}
       </div>
     </div>
   );
-};
-
-export const MessageBubble = memo(MessageBubbleComponent);
+});

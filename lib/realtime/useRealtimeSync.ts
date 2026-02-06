@@ -73,6 +73,9 @@ const getTableQueryKeys = (table: RealtimeTable): readonly (readonly unknown[])[
       queryKeys.messagingConversations.all,
       queryKeys.messagingConversations.unreadCount(),
     ],
+    // messaging_messages uses targeted invalidation via conversation_id
+    // (see handleMessagingMessageChange below). This fallback covers edge cases
+    // where payload doesn't contain conversation_id.
     messaging_messages: [queryKeys.messagingMessages.all],
   };
   return mapping[table];
@@ -168,12 +171,40 @@ export function useRealtimeSync(
               oldUpdatedAt: oldData?.updated_at || oldData?.updatedAt || '',
             };
             console.log(`[Realtime] 📨 Event received: ${table} ${payload.eventType}`, logData);
-            fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:117',message:'Event received',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-event',hypothesisId:'S'})}).catch(()=>{});
           }
           // #endregion
 
           // Call custom callback (if provided)
           onchangeRef.current?.(payload);
+
+          // Targeted invalidation for messaging_messages:
+          // Extract conversation_id from the payload to only invalidate that conversation's
+          // message cache instead of all message queries.
+          if (table === 'messaging_messages') {
+            const record = (payload.new || payload.old) as Record<string, unknown>;
+            const conversationId = record?.conversation_id as string | undefined;
+            if (conversationId) {
+              const targetKey = queryKeys.messagingMessages.byConversation(conversationId);
+              pendingInvalidationsRef.current.add(targetKey);
+              // Also invalidate conversations (unread count, last message preview, etc.)
+              pendingInvalidationsRef.current.add(queryKeys.messagingConversations.all);
+              pendingInvalidationsRef.current.add(queryKeys.messagingConversations.unreadCount());
+
+              if (!flushScheduledRef.current) {
+                flushScheduledRef.current = true;
+                queueMicrotask(() => {
+                  flushScheduledRef.current = false;
+                  const keysToFlush = Array.from(pendingInvalidationsRef.current);
+                  pendingInvalidationsRef.current.clear();
+                  keysToFlush.forEach((queryKey) => {
+                    queryClient.invalidateQueries({ queryKey, exact: false, refetchType: 'all' });
+                  });
+                });
+              }
+              return; // Skip generic invalidation for this table
+            }
+            // If no conversation_id, fall through to generic invalidation
+          }
 
           // Queue query keys for invalidation (lazy loaded)
           const keys = getTableQueryKeys(table);
@@ -206,7 +237,6 @@ export function useRealtimeSync(
                 // #region agent log
                 if (process.env.NODE_ENV !== 'production') {
                   console.log(`[Realtime] ⏭️ INSERT deals - skipping duplicate`, { dealId: dealId.slice(0, 8) });
-                  fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:180',message:'INSERT deals - skipping duplicate',data:{dealId:dealId.slice(0,8)},timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-insert',hypothesisId:'RI0'})}).catch(()=>{});
                 }
                 // #endregion
                 return; // Skip this event, already processed by another hook instance
@@ -220,7 +250,6 @@ export function useRealtimeSync(
                   status: typeof newData.stage_id === 'string' ? (newData.stage_id as string).slice(0, 8) : 'null',
                 };
                 console.log(`[Realtime] 📥 INSERT deals - adding to cache directly`, logData);
-                fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:180',message:'INSERT deals - adding to cache directly',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-insert',hypothesisId:'RI1'})}).catch(()=>{});
               }
               // #endregion
 
@@ -290,7 +319,6 @@ export function useRealtimeSync(
                     // #region agent log
                     if (process.env.NODE_ENV !== 'production') {
                       console.log(`[Realtime] 📥 INSERT deals - deal already exists, updating`, { dealId: dealId.slice(0, 8) });
-                      fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:240',message:'INSERT deals - deal already exists, updating',data:{dealId:dealId.slice(0,8)},timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-insert',hypothesisId:'RI3'})}).catch(()=>{});
                     }
                     // #endregion
                     return old.map((d, i) => i === existingIndex ? { ...d, ...normalizedDeal } as DealView : d);
@@ -307,7 +335,6 @@ export function useRealtimeSync(
                   if (process.env.NODE_ENV !== 'production') {
                     const removedCount = old.length - tempDealsRemoved.length;
                     console.log(`[Realtime] 📥 INSERT deals - adding new deal to cache`, { dealId: dealId.slice(0, 8), removedTempDeals: removedCount, cacheSize: tempDealsRemoved.length + 1 });
-                    fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:255',message:'INSERT deals - adding new deal to cache',data:{dealId:dealId.slice(0,8),removedTempDeals:removedCount,cacheSize:tempDealsRemoved.length+1},timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-insert',hypothesisId:'RI4'})}).catch(()=>{});
                   }
                   // #endregion
                   
@@ -385,7 +412,6 @@ export function useRealtimeSync(
                   rawStageId: typeof newData.stage_id === 'string' ? (newData.stage_id as string).slice(0, 8) : 'null',
                 };
                 console.log(`[Realtime] 🔍 Processing deals UPDATE`, logData);
-                fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:195',message:'Processing deals UPDATE',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-update',hypothesisId:'A'})}).catch(()=>{});
               }
               // #endregion
 
@@ -420,7 +446,6 @@ export function useRealtimeSync(
                       cacheSize: old.length,
                     };
                     console.log(`[Realtime] 🔍 Cache state`, logData);
-                    fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:226',message:'Cache state',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-update',hypothesisId:'B'})}).catch(()=>{});
                   }
                   // #endregion
                   
@@ -464,7 +489,6 @@ export function useRealtimeSync(
                           payloadOldStatus: payloadOldStatus.slice(0, 8),
                         };
                         console.log(`[Realtime] ⚠️ Skipping update - incoming matches oldStatus (reverting)`, logData);
-                        fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:265',message:'Skipping stale update (reverting)',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-update',hypothesisId:'D'})}).catch(()=>{});
                       }
                       // #endregion
                       return old; // Skip stale update
@@ -500,7 +524,6 @@ export function useRealtimeSync(
                               diffMs: diffMs,
                             };
                             console.log(`[Realtime] ⚠️ Skipping update - incoming timestamp significantly older (stale)`, logData);
-                            fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:290',message:'Skipping stale update (incoming timestamp significantly older)',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-update',hypothesisId:'C'})}).catch(()=>{});
                           }
                           // #endregion
                           return old; // Skip stale update
@@ -519,7 +542,6 @@ export function useRealtimeSync(
                             diffMs: diffMs,
                           };
                           console.log(`[Realtime] ✅ Applying update (empty oldStatus, timestamp newer or close)`, logData);
-                          fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:315',message:'Applying update (empty oldStatus, timestamp newer or close)',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-update',hypothesisId:'L'})}).catch(()=>{});
                         }
                         // #endregion
                         // Continue to apply the update below
@@ -536,7 +558,6 @@ export function useRealtimeSync(
                               incomingUpdatedAt: incomingUpdatedAt ? new Date(incomingUpdatedAt).toISOString() : 'null',
                             };
                             console.log(`[Realtime] ✅ Applying update (empty oldStatus, can't compare but status matches)`, logData);
-                            fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:330',message:'Applying update (empty oldStatus, can\'t compare but status matches)',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-update',hypothesisId:'M'})}).catch(()=>{});
                           }
                           // #endregion
                           // Continue to apply the update below
@@ -551,7 +572,6 @@ export function useRealtimeSync(
                               incomingUpdatedAt: incomingUpdatedAt ? new Date(incomingUpdatedAt).toISOString() : 'null',
                             };
                             console.log(`[Realtime] ⚠️ Skipping update (empty oldStatus, can't compare and status differs)`, logData);
-                            fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:345',message:'Skipping update (empty oldStatus, can\'t compare and status differs)',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-update',hypothesisId:'N'})}).catch(()=>{});
                           }
                           // #endregion
                           return old; // Skip update - too risky without timestamp comparison
@@ -599,7 +619,6 @@ export function useRealtimeSync(
                           newStatus: incomingStatus ? incomingStatus.slice(0, 8) : '',
                         };
                         console.log(`[Realtime] ✅ Applying update to cache`, logData);
-                        fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:346',message:'Applying update to cache',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-update',hypothesisId:'E'})}).catch(()=>{});
                       }
                       // #endregion
                       // Transform Realtime payload (snake_case) to app format (camelCase)
@@ -704,7 +723,6 @@ export function useRealtimeSync(
             status: 'SUBSCRIBED',
           };
           console.log(`[Realtime] ✅ Connected to ${tableList.join(', ')}`);
-          fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:488',message:'Realtime connected',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-connection',hypothesisId:'O'})}).catch(()=>{});
         }
         // #endregion
       } else if (status === 'CHANNEL_ERROR') {
@@ -712,7 +730,6 @@ export function useRealtimeSync(
         // #region agent log
         if (process.env.NODE_ENV !== 'production') {
           const logData = { channelName, tables: tableList.join(','), status: 'CHANNEL_ERROR' };
-          fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:497',message:'Realtime channel error',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-connection',hypothesisId:'P'})}).catch(()=>{});
         }
         // #endregion
       } else if (status === 'TIMED_OUT') {
@@ -720,7 +737,6 @@ export function useRealtimeSync(
         // #region agent log
         if (process.env.NODE_ENV !== 'production') {
           const logData = { channelName, tables: tableList.join(','), status: 'TIMED_OUT' };
-          fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:500',message:'Realtime channel timeout',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-connection',hypothesisId:'Q'})}).catch(()=>{});
         }
         // #endregion
       } else if (status === 'CLOSED') {
@@ -730,7 +746,6 @@ export function useRealtimeSync(
         // #region agent log
         if (process.env.NODE_ENV !== 'production') {
           const logData = { channelName, tables: tableList.join(','), status: 'CLOSED' };
-          fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealtimeSync.ts:503',message:'Realtime channel closed',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'realtime-connection',hypothesisId:'R'})}).catch(()=>{});
         }
         // #endregion
       }
@@ -783,4 +798,12 @@ export function useRealtimeSyncAll(options: UseRealtimeSyncOptions = {}) {
  */
 export function useRealtimeSyncKanban(options: UseRealtimeSyncOptions = {}) {
   return useRealtimeSync(['deals', 'board_stages'], options);
+}
+
+/**
+ * Subscribe to Messaging-related tables
+ * Optimized for the messaging inbox
+ */
+export function useRealtimeSyncMessaging(options: UseRealtimeSyncOptions = {}) {
+  return useRealtimeSync(['messaging_conversations', 'messaging_messages'], options);
 }

@@ -1,253 +1,243 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Plus, Inbox, MessageSquare } from 'lucide-react';
+import { Search, Filter, Inbox, CheckCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ConversationItem, type ConversationItemData } from './ConversationItem';
-import { ConversationListSkeleton } from './skeletons/ConversationListSkeleton';
-import type { ConversationStatus, ChannelType } from '@/lib/messaging/types';
-
-// =============================================================================
-// TYPES
-// =============================================================================
+import { ConversationItem } from './ConversationItem';
+import { ChannelIndicator } from './ChannelIndicator';
+import { useConversations } from '@/lib/query/hooks/useConversationsQuery';
+import type { ConversationFilters, ConversationStatus, ChannelType } from '@/lib/messaging/types';
 
 interface ConversationListProps {
-  conversations: ConversationItemData[];
-  isLoading?: boolean;
-  activeConversationId?: string;
-  onSelectConversation: (id: string) => void;
-  onNewConversation?: () => void;
-  className?: string;
+  selectedId?: string;
+  onSelect: (conversationId: string) => void;
+  businessUnitId?: string;
 }
 
-type FilterStatus = 'all' | ConversationStatus;
-
-// =============================================================================
-// FILTER TABS
-// =============================================================================
-
-const STATUS_TABS: { value: FilterStatus; label: string }[] = [
-  { value: 'all', label: 'Todas' },
-  { value: 'open', label: 'Abertas' },
-  { value: 'resolved', label: 'Resolvidas' },
+const CHANNEL_OPTIONS: { id: ChannelType | 'all'; label: string }[] = [
+  { id: 'all', label: 'Todos os canais' },
+  { id: 'whatsapp', label: 'WhatsApp' },
+  { id: 'instagram', label: 'Instagram' },
+  { id: 'email', label: 'Email' },
+  { id: 'sms', label: 'SMS' },
 ];
 
-// =============================================================================
-// COMPONENT
-// =============================================================================
-
 export function ConversationList({
-  conversations,
-  isLoading = false,
-  activeConversationId,
-  onSelectConversation,
-  onNewConversation,
-  className,
+  selectedId,
+  onSelect,
+  businessUnitId,
 }: ConversationListProps) {
+  const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('open');
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
   const [channelFilter, setChannelFilter] = useState<ChannelType | 'all'>('all');
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Get unique channels for filter
-  const availableChannels = useMemo(() => {
-    const channels = new Set<ChannelType>();
-    conversations.forEach((c) => channels.add(c.channelType));
-    return Array.from(channels);
-  }, [conversations]);
+  const filters: ConversationFilters = useMemo(() => ({
+    status: statusFilter,
+    businessUnitId,
+    search: searchQuery || undefined,
+    channelId: channelFilter !== 'all' ? channelFilter : undefined,
+    hasUnread: showUnreadOnly || undefined,
+  }), [statusFilter, businessUnitId, searchQuery, channelFilter, showUnreadOnly]);
 
-  // Filter conversations
-  const filteredConversations = useMemo(() => {
-    return conversations.filter((conv) => {
-      // Status filter
-      if (statusFilter !== 'all' && conv.status !== statusFilter) {
-        return false;
-      }
+  const { data: conversations, isLoading, error } = useConversations(filters);
 
-      // Channel filter
-      if (channelFilter !== 'all' && conv.channelType !== channelFilter) {
-        return false;
-      }
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (channelFilter !== 'all') count++;
+    if (showUnreadOnly) count++;
+    return count;
+  }, [channelFilter, showUnreadOnly]);
 
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const name = (conv.externalContactName || '').toLowerCase();
-        const id = conv.externalContactId.toLowerCase();
-        const preview = (conv.lastMessagePreview || '').toLowerCase();
-        return name.includes(query) || id.includes(query) || preview.includes(query);
-      }
+  const clearFilters = () => {
+    setChannelFilter('all');
+    setShowUnreadOnly(false);
+  };
 
-      return true;
-    });
-  }, [conversations, statusFilter, channelFilter, searchQuery]);
-
-  // Count unread
-  const unreadCount = useMemo(() => {
-    return conversations.filter((c) => c.unreadCount > 0 && c.status === 'open').length;
-  }, [conversations]);
-
-  if (isLoading) {
-    return <ConversationListSkeleton className={className} />;
-  }
+  const statusTabs = [
+    { id: 'open' as const, label: 'Abertas', icon: Inbox },
+    { id: 'resolved' as const, label: 'Resolvidas', icon: CheckCircle },
+  ];
 
   return (
-    <div className={cn('flex flex-col h-full', className)}>
+    <div className="flex flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/10">
       {/* Header */}
-      <div className="shrink-0 p-4 border-b border-[var(--color-border)]">
+      <div className="p-4 border-b border-slate-200 dark:border-white/10">
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-              Conversas
-            </h2>
-            {unreadCount > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold rounded-full bg-[var(--conversation-unread-dot)] text-white">
-                {unreadCount}
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Conversas
+          </h2>
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            className={cn(
+              'relative p-2 rounded-lg transition-colors',
+              showFilters || activeFiltersCount > 0
+                ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-400'
+                : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-600 dark:hover:text-white'
+            )}
+            title="Filtros"
+          >
+            <Filter className="w-4 h-4" />
+            {activeFiltersCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center text-[10px] font-bold text-white bg-primary-500 rounded-full">
+                {activeFiltersCount}
               </span>
             )}
-          </div>
-          {onNewConversation && (
-            <button
-              onClick={onNewConversation}
-              className="p-2 rounded-lg hover:bg-[var(--color-muted)] transition-colors"
-              title="Nova conversa"
-            >
-              <Plus className="w-5 h-5 text-[var(--color-text-secondary)]" />
-            </button>
-          )}
+          </button>
         </div>
 
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder="Buscar conversas..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className={cn(
-              'w-full pl-10 pr-4 py-2 text-sm rounded-lg',
-              'bg-[var(--color-muted)] border border-transparent',
-              'placeholder:text-[var(--color-text-muted)]',
-              'focus:outline-none focus:border-[var(--color-border)] focus:bg-[var(--color-surface)]',
-              'transition-colors'
-            )}
+            className="w-full pl-9 pr-4 py-2 text-sm bg-slate-100 dark:bg-white/5 border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-slate-900 dark:text-white placeholder-slate-400"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        {/* Status Tabs */}
+        {/* Status tabs */}
         <div className="flex gap-1 mt-3">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setStatusFilter(tab.value)}
-              className={cn(
-                'px-3 py-1.5 text-sm rounded-md transition-colors',
-                statusFilter === tab.value
-                  ? 'bg-[var(--color-text-primary)] text-[var(--color-surface)]'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-muted)]'
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Channel Filter (if multiple channels) */}
-        {availableChannels.length > 1 && (
-          <div className="flex gap-1 mt-2 overflow-x-auto">
-            <button
-              onClick={() => setChannelFilter('all')}
-              className={cn(
-                'px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap',
-                channelFilter === 'all'
-                  ? 'bg-[var(--color-muted)] text-[var(--color-text-primary)]'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]'
-              )}
-            >
-              Todos
-            </button>
-            {availableChannels.map((channel) => (
+          {statusTabs.map((tab) => {
+            const isActive = statusFilter === tab.id;
+            return (
               <button
-                key={channel}
-                onClick={() => setChannelFilter(channel)}
+                key={tab.id}
+                type="button"
+                onClick={() => setStatusFilter(tab.id)}
                 className={cn(
-                  'px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap capitalize',
-                  channelFilter === channel
-                    ? 'bg-[var(--color-muted)] text-[var(--color-text-primary)]'
-                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]'
+                  'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
+                  isActive
+                    ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-700 dark:text-primary-300'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'
                 )}
               >
-                {channel}
+                <tab.icon className="w-4 h-4" />
+                {tab.label}
               </button>
-            ))}
+            );
+          })}
+        </div>
+
+        {/* Additional Filters Panel */}
+        {showFilters && (
+          <div className="mt-3 p-3 bg-slate-50 dark:bg-white/5 rounded-lg space-y-3">
+            {/* Channel Filter */}
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                Canal
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {CHANNEL_OPTIONS.map((channel) => (
+                  <button
+                    key={channel.id}
+                    type="button"
+                    onClick={() => setChannelFilter(channel.id)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full transition-colors',
+                      channelFilter === channel.id
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:border-primary-300'
+                    )}
+                  >
+                    {channel.id !== 'all' && (
+                      <ChannelIndicator type={channel.id as ChannelType} size="sm" />
+                    )}
+                    {channel.id === 'all' ? channel.label : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Unread Filter */}
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Apenas não lidas
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowUnreadOnly(!showUnreadOnly)}
+                className={cn(
+                  'relative w-9 h-5 rounded-full transition-colors',
+                  showUnreadOnly
+                    ? 'bg-primary-500'
+                    : 'bg-slate-300 dark:bg-slate-600'
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform',
+                    showUnreadOnly && 'translate-x-4'
+                  )}
+                />
+              </button>
+            </div>
+
+            {/* Clear Filters */}
+            {activeFiltersCount > 0 && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="w-full py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+              >
+                Limpar filtros
+              </button>
+            )}
           </div>
         )}
       </div>
 
       {/* List */}
       <div className="flex-1 overflow-y-auto">
-        {filteredConversations.length === 0 ? (
-          <EmptyState
-            hasFilters={searchQuery !== '' || statusFilter !== 'all' || channelFilter !== 'all'}
-            onClearFilters={() => {
-              setSearchQuery('');
-              setStatusFilter('all');
-              setChannelFilter('all');
-            }}
-          />
-        ) : (
-          <div className="p-2 space-y-1">
-            {filteredConversations.map((conversation) => (
-              <ConversationItem
-                key={conversation.id}
-                conversation={conversation}
-                isActive={conversation.id === activeConversationId}
-                onClick={onSelectConversation}
-              />
+        {isLoading ? (
+          <div className="p-4 space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="animate-pulse flex gap-3">
+                <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4" />
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2" />
+                </div>
+              </div>
             ))}
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// =============================================================================
-// EMPTY STATE
-// =============================================================================
-
-function EmptyState({
-  hasFilters,
-  onClearFilters,
-}: {
-  hasFilters: boolean;
-  onClearFilters: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-      <div className="w-12 h-12 rounded-full bg-[var(--color-muted)] flex items-center justify-center mb-4">
-        {hasFilters ? (
-          <Filter className="w-6 h-6 text-[var(--color-text-muted)]" />
+        ) : error ? (
+          <div className="p-4 text-center text-red-500">
+            Erro ao carregar conversas
+          </div>
+        ) : conversations?.length === 0 ? (
+          <div className="p-8 text-center">
+            <Inbox className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+            <p className="text-slate-500 dark:text-slate-400">
+              {statusFilter === 'open'
+                ? 'Nenhuma conversa aberta'
+                : 'Nenhuma conversa resolvida'}
+            </p>
+          </div>
         ) : (
-          <Inbox className="w-6 h-6 text-[var(--color-text-muted)]" />
+          conversations?.map((conversation) => (
+            <ConversationItem
+              key={conversation.id}
+              conversation={conversation}
+              isSelected={conversation.id === selectedId}
+              onClick={() => onSelect(conversation.id)}
+            />
+          ))
         )}
       </div>
-      <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-1">
-        {hasFilters ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa'}
-      </h3>
-      <p className="text-sm text-[var(--color-text-muted)] mb-4">
-        {hasFilters
-          ? 'Tente ajustar os filtros de busca'
-          : 'As conversas aparecerão aqui quando houver mensagens'}
-      </p>
-      {hasFilters && (
-        <button
-          onClick={onClearFilters}
-          className="text-sm text-[var(--color-info)] hover:underline"
-        >
-          Limpar filtros
-        </button>
-      )}
     </div>
   );
 }

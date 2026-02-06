@@ -1,198 +1,108 @@
 'use client';
 
-import React, { useRef, useEffect, useMemo } from 'react';
-import { format, isToday, isYesterday, isSameDay } from 'date-fns';
+import React, { useEffect, useRef } from 'react';
+import { format, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Loader2, ArrowDown } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { MessageBubble, type MessageBubbleData } from './MessageBubble';
-import { MessageThreadSkeleton } from './skeletons/MessageThreadSkeleton';
-
-// =============================================================================
-// TYPES
-// =============================================================================
+import { MessageSquare } from 'lucide-react';
+import { MessageBubble } from './MessageBubble';
+import { useMessages } from '@/lib/query/hooks/useMessagesQuery';
+import type { MessagingMessage } from '@/lib/messaging/types';
 
 interface MessageThreadProps {
-  messages: MessageBubbleData[];
-  isLoading?: boolean;
-  isFetchingMore?: boolean;
-  hasMore?: boolean;
-  onLoadMore?: () => void;
-  className?: string;
+  conversationId: string;
 }
 
-interface MessageGroup {
-  date: Date;
-  messages: MessageBubbleData[];
-}
+function DateDivider({ date }: { date: Date }) {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
 
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-function formatDateSeparator(date: Date): string {
-  if (isToday(date)) {
-    return 'Hoje';
-  }
-  if (isYesterday(date)) {
-    return 'Ontem';
-  }
-  return format(date, "d 'de' MMMM", { locale: ptBR });
-}
-
-function groupMessagesByDate(messages: MessageBubbleData[]): MessageGroup[] {
-  const groups: MessageGroup[] = [];
-  let currentGroup: MessageGroup | null = null;
-
-  for (const message of messages) {
-    const messageDate = new Date(message.createdAt);
-
-    if (!currentGroup || !isSameDay(currentGroup.date, messageDate)) {
-      currentGroup = {
-        date: messageDate,
-        messages: [],
-      };
-      groups.push(currentGroup);
-    }
-
-    currentGroup.messages.push(message);
+  let label: string;
+  if (isSameDay(date, today)) {
+    label = 'Hoje';
+  } else if (isSameDay(date, yesterday)) {
+    label = 'Ontem';
+  } else {
+    label = format(date, "d 'de' MMMM", { locale: ptBR });
   }
 
-  return groups;
-}
-
-// =============================================================================
-// DATE SEPARATOR
-// =============================================================================
-
-function DateSeparator({ date }: { date: Date }) {
   return (
-    <div className="flex items-center justify-center py-4">
-      <div className="px-3 py-1 rounded-full bg-[var(--color-muted)] text-xs text-[var(--color-text-muted)]">
-        {formatDateSeparator(date)}
-      </div>
+    <div className="flex items-center justify-center my-4">
+      <span className="px-3 py-1 text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-full">
+        {label}
+      </span>
     </div>
   );
 }
 
-// =============================================================================
-// COMPONENT
-// =============================================================================
+export function MessageThread({ conversationId }: MessageThreadProps) {
+  const { data: messages, isLoading, error } = useMessages(conversationId);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const prevMessagesLengthRef = useRef(0);
 
-export function MessageThread({
-  messages,
-  isLoading = false,
-  isFetchingMore = false,
-  hasMore = false,
-  onLoadMore,
-  className,
-}: MessageThreadProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const prevMessagesLengthRef = useRef(messages.length);
-
-  // Group messages by date
-  const messageGroups = useMemo(() => groupMessagesByDate(messages), [messages]);
-
-  // Auto-scroll to bottom when new messages arrive
+  // Scroll to bottom when new messages arrive
   useEffect(() => {
-    const isNewMessage = messages.length > prevMessagesLengthRef.current;
-    prevMessagesLengthRef.current = messages.length;
-
-    if (isNewMessage && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (messages && messages.length > prevMessagesLengthRef.current) {
+      scrollRef.current?.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: prevMessagesLengthRef.current === 0 ? 'auto' : 'smooth',
+      });
     }
-  }, [messages.length]);
-
-  // Infinite scroll handler
-  const handleScroll = () => {
-    if (!containerRef.current || !hasMore || isFetchingMore || !onLoadMore) return;
-
-    const { scrollTop } = containerRef.current;
-
-    // Load more when scrolled near top
-    if (scrollTop < 100) {
-      onLoadMore();
-    }
-  };
+    prevMessagesLengthRef.current = messages?.length || 0;
+  }, [messages]);
 
   if (isLoading) {
-    return <MessageThreadSkeleton className={className} />;
-  }
-
-  if (messages.length === 0) {
     return (
-      <div className={cn('flex-1 flex items-center justify-center', className)}>
-        <div className="text-center p-8">
-          <p className="text-sm text-[var(--color-text-muted)]">
-            Nenhuma mensagem ainda
-          </p>
-          <p className="text-xs text-[var(--color-text-subtle)] mt-1">
-            Envie uma mensagem para iniciar a conversa
-          </p>
-        </div>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="animate-pulse text-slate-400">Carregando mensagens...</div>
       </div>
     );
   }
 
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-red-500">Erro ao carregar mensagens</div>
+      </div>
+    );
+  }
+
+  if (!messages || messages.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
+        <MessageSquare className="w-12 h-12 mb-3 opacity-50" />
+        <p>Nenhuma mensagem ainda</p>
+        <p className="text-sm">Envie uma mensagem para iniciar a conversa</p>
+      </div>
+    );
+  }
+
+  // Group messages by date
+  const messagesWithDates: Array<{ type: 'date'; date: Date } | { type: 'message'; message: MessagingMessage }> = [];
+  let lastDate: string | null = null;
+
+  messages.forEach((message) => {
+    const messageDate = new Date(message.createdAt);
+    const dateKey = format(messageDate, 'yyyy-MM-dd');
+
+    if (dateKey !== lastDate) {
+      messagesWithDates.push({ type: 'date', date: messageDate });
+      lastDate = dateKey;
+    }
+    messagesWithDates.push({ type: 'message', message });
+  });
+
   return (
     <div
-      ref={containerRef}
-      onScroll={handleScroll}
-      className={cn(
-        'flex-1 overflow-y-auto px-4 py-2',
-        'scroll-smooth',
-        className
-      )}
+      ref={scrollRef}
+      className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50 dark:bg-slate-900/50"
     >
-      {/* Load more indicator */}
-      {isFetchingMore && (
-        <div className="flex justify-center py-4">
-          <Loader2 className="w-5 h-5 animate-spin text-[var(--color-text-muted)]" />
-        </div>
-      )}
-
-      {/* Load more button */}
-      {hasMore && !isFetchingMore && onLoadMore && (
-        <div className="flex justify-center py-2">
-          <button
-            onClick={onLoadMore}
-            className="text-xs text-[var(--color-info)] hover:underline"
-          >
-            Carregar mensagens anteriores
-          </button>
-        </div>
-      )}
-
-      {/* Message groups */}
-      {messageGroups.map((group, groupIndex) => (
-        <div key={group.date.toISOString()}>
-          <DateSeparator date={group.date} />
-
-          <div className="space-y-2">
-            {group.messages.map((message, messageIndex) => {
-              // Show sender for first message or when sender changes
-              const prevMessage = messageIndex > 0 ? group.messages[messageIndex - 1] : null;
-              const showSender =
-                message.direction === 'inbound' &&
-                (!prevMessage ||
-                  prevMessage.direction !== message.direction ||
-                  prevMessage.senderName !== message.senderName);
-
-              return (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  showSender={showSender}
-                />
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
-      {/* Bottom anchor for auto-scroll */}
-      <div ref={bottomRef} />
+      {messagesWithDates.map((item, index) => {
+        if (item.type === 'date') {
+          return <DateDivider key={`date-${index}`} date={item.date} />;
+        }
+        return <MessageBubble key={item.message.id} message={item.message} />;
+      })}
     </div>
   );
 }

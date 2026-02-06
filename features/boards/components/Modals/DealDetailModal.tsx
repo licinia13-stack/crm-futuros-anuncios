@@ -34,7 +34,9 @@ import {
   Bot,
   Tag as TagIcon,
   Plus,
+  MessageSquare,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { StageProgressBar } from '../StageProgressBar';
 import { ActivityRow } from '@/features/activities/components/ActivityRow';
 import { formatPriorityPtBr } from '@/lib/utils/priority';
@@ -83,6 +85,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   } = useCRM();
   const { profile } = useAuth();
   const { addToast } = useToast();
+  const router = useRouter();
 
   // Performance: avoid repeated `find(...)` on large arrays.
   const dealsById = useMemo(() => new Map(deals.map((d) => [d.id, d])), [deals]);
@@ -605,7 +608,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                     <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold">
                       {(deal.contactName || '?').charAt(0)}
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-slate-900 dark:text-white font-medium text-sm flex items-center gap-2">
                         {deal.contactName || 'Sem contato'}
                         {contact?.stage &&
@@ -629,6 +632,28 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                       </p>
                       <p className="text-slate-500 text-xs">{deal.contactEmail}</p>
                     </div>
+                    {/* Send Message Button */}
+                    {contact?.phone && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Navigate to messaging with contact info for new conversation
+                          const params = new URLSearchParams({
+                            newConversation: 'true',
+                            contactId: contact.id,
+                            contactName: contact.name || '',
+                            contactPhone: contact.phone || '',
+                          });
+                          router.push(`/messaging?${params.toString()}`);
+                          onClose();
+                        }}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 hover:bg-green-100 dark:hover:bg-green-500/20 rounded-lg transition-colors"
+                        title="Enviar mensagem via WhatsApp"
+                      >
+                        <MessageSquare size={14} />
+                        <span className="hidden sm:inline">Mensagem</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 

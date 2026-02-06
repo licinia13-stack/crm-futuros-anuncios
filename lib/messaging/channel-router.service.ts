@@ -22,7 +22,7 @@
  * ```
  */
 
-import { getClient } from '@/lib/supabase/client';
+import { createStaticAdminClient } from '@/lib/supabase/server';
 import { ChannelProviderFactory } from './channel-factory';
 import type {
   ChannelType,
@@ -453,9 +453,10 @@ export class ChannelRouterService {
 
   /**
    * Fetch channel from database.
+   * Uses admin client (service role) to bypass RLS since this runs server-side.
    */
   private async fetchChannel(channelId: string): Promise<MessagingChannel | null> {
-    const supabase = getClient();
+    const supabase = createStaticAdminClient();
 
     const { data, error } = await supabase
       .from('messaging_channels')

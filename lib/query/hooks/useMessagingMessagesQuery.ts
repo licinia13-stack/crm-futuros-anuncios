@@ -25,7 +25,7 @@ import type {
   PaginationState,
 } from '@/lib/messaging/types';
 import { transformMessage, createTextContent } from '@/lib/messaging/types';
-import { getChannelRouter } from '@/lib/messaging';
+// NOTE: Channel router is server-only. Client code should call API endpoints.
 
 // =============================================================================
 // CONSTANTS
@@ -175,78 +175,26 @@ export function useMessagingMessage(messageId: string | undefined) {
 
 /**
  * Send a message in a conversation.
- * This creates the message locally and sends it through the provider.
+ * Calls the API endpoint which handles provider routing server-side.
  */
 export function useSendMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (input: SendMessageInput): Promise<MessagingMessage> => {
-      const supabase = getClient();
-
-      // First, get the conversation to find the channel and recipient
-      const { data: conversation, error: convError } = await supabase
-        .from('messaging_conversations')
-        .select('channel_id, external_contact_id')
-        .eq('id', input.conversationId)
-        .single();
-
-      if (convError || !conversation) {
-        throw new Error('Conversation not found');
-      }
-
-      // Create the message in pending state
-      const contentType = input.content.type;
-      const { data: message, error: msgError } = await supabase
-        .from('messaging_messages')
-        .insert({
-          conversation_id: input.conversationId,
-          direction: 'outbound',
-          content_type: contentType,
-          content: input.content,
-          reply_to_message_id: input.replyToMessageId,
-          status: 'pending',
-        })
-        .select()
-        .single();
-
-      if (msgError) throw msgError;
-
-      // Send through the channel router
-      const router = getChannelRouter();
-      const result = await router.sendMessage(conversation.channel_id, {
-        conversationId: input.conversationId,
-        to: conversation.external_contact_id,
-        content: input.content,
-        replyToMessageId: input.replyToMessageId,
+      // Call the API endpoint (server-side) to send the message
+      const response = await fetch('/api/messaging/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
       });
 
-      // Update the message with the result
-      const updateData: Record<string, unknown> = {
-        status: result.success ? 'sent' : 'failed',
-      };
-
-      if (result.success) {
-        updateData.external_id = result.externalMessageId;
-        updateData.sent_at = new Date().toISOString();
-      } else {
-        updateData.error_code = result.error?.code;
-        updateData.error_message = result.error?.message;
-        updateData.failed_at = new Date().toISOString();
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to send message');
       }
 
-      const { data: updatedMessage, error: updateError } = await supabase
-        .from('messaging_messages')
-        .update(updateData)
-        .eq('id', message.id)
-        .select()
-        .single();
-
-      if (updateError) {
-        console.error('[useSendMessage] Failed to update message status:', updateError);
-      }
-
-      return transformMessage(updatedMessage || message);
+      return response.json();
     },
     onMutate: async (input) => {
       // Optimistic update: add message to cache immediately
@@ -382,75 +330,24 @@ export function useUpdateMessageStatus() {
 
 /**
  * Retry a failed message.
+ * TODO: Implement API endpoint for retry
  */
 export function useRetryMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (messageId: string): Promise<MessagingMessage> => {
-      const supabase = getClient();
-
-      // Get the original message
-      const { data: message, error: msgError } = await supabase
-        .from('messaging_messages')
-        .select('*, conversation:messaging_conversations!conversation_id(channel_id, external_contact_id)')
-        .eq('id', messageId)
-        .single();
-
-      if (msgError || !message) {
-        throw new Error('Message not found');
-      }
-
-      if (message.status !== 'failed') {
-        throw new Error('Can only retry failed messages');
-      }
-
-      // Reset to pending
-      await supabase
-        .from('messaging_messages')
-        .update({
-          status: 'pending',
-          error_code: null,
-          error_message: null,
-          failed_at: null,
-        })
-        .eq('id', messageId);
-
-      // Retry sending
-      const router = getChannelRouter();
-      const conversation = message.conversation as { channel_id: string; external_contact_id: string };
-
-      const result = await router.sendMessage(conversation.channel_id, {
-        conversationId: message.conversation_id,
-        to: conversation.external_contact_id,
-        content: message.content,
-        replyToMessageId: message.reply_to_message_id,
+      // Call the API endpoint (server-side) to retry the message
+      const response = await fetch(`/api/messaging/messages/${messageId}/retry`, {
+        method: 'POST',
       });
 
-      // Update with result
-      const updateData: Record<string, unknown> = {
-        status: result.success ? 'sent' : 'failed',
-      };
-
-      if (result.success) {
-        updateData.external_id = result.externalMessageId;
-        updateData.sent_at = new Date().toISOString();
-      } else {
-        updateData.error_code = result.error?.code;
-        updateData.error_message = result.error?.message;
-        updateData.failed_at = new Date().toISOString();
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to retry message');
       }
 
-      const { data: updatedMessage, error: updateError } = await supabase
-        .from('messaging_messages')
-        .update(updateData)
-        .eq('id', messageId)
-        .select()
-        .single();
-
-      if (updateError) throw updateError;
-
-      return transformMessage(updatedMessage);
+      return response.json();
     },
     onSuccess: (message) => {
       queryClient.invalidateQueries({

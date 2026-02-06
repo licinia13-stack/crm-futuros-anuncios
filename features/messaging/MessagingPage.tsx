@@ -1,258 +1,225 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { MessageSquare, User, Phone, Mail, Building2, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { useMessagingController } from './hooks/useMessagingController';
+import { sanitizeUrl } from '@/lib/utils/sanitize';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
+import { ConversationList } from './components/ConversationList';
+import { MessageThread } from './components/MessageThread';
+import { MessageInput } from './components/MessageInput';
+import { ContactPanel } from './components/ContactPanel';
+import { ContactLinkModal } from './components/Modals/ContactLinkModal';
+import { ChannelIndicator } from './components/ChannelIndicator';
+import { WindowExpiryBadge } from './components/WindowExpiryBadge';
 import {
-  ConversationList,
-  MessageThread,
-  MessageInput,
-} from './components';
+  useConversation,
+  useMarkConversationRead,
+  useResolveConversation,
+} from '@/lib/query/hooks/useConversationsQuery';
+import { useRealtimeSyncMessaging } from '@/lib/realtime/useRealtimeSync';
+import { queryKeys } from '@/lib/query';
+import type { ConversationView } from '@/lib/messaging/types';
 
-// =============================================================================
-// CONTACT PANEL
-// =============================================================================
-
-interface ContactPanelProps {
-  conversation: {
-    externalContactId: string;
-    externalContactName?: string;
-    externalContactAvatar?: string;
-    channelType: string;
-    channelName: string;
-  } | null;
-  className?: string;
+interface MessagingPageProps {
+  initialConversationId?: string;
 }
 
-function ContactPanel({ conversation, className }: ContactPanelProps) {
-  if (!conversation) {
-    return (
-      <div className={cn('flex items-center justify-center h-full', className)}>
-        <div className="text-center p-8">
-          <div className="w-12 h-12 rounded-full bg-[var(--color-muted)] flex items-center justify-center mx-auto mb-4">
-            <User className="w-6 h-6 text-[var(--color-text-muted)]" />
-          </div>
-          <p className="text-sm text-[var(--color-text-muted)]">
-            Selecione uma conversa para ver os detalhes
-          </p>
-        </div>
-      </div>
-    );
-  }
+export function MessagingPage({ initialConversationId }: MessagingPageProps = {}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const conversationIdParam = searchParams.get('id');
+  const queryClient = useQueryClient();
+  const { profile } = useAuth();
 
-  const displayName = conversation.externalContactName || conversation.externalContactId;
-
-  return (
-    <div className={cn('flex flex-col h-full', className)}>
-      {/* Header */}
-      <div className="p-4 border-b border-[var(--color-border)]">
-        <div className="flex items-center gap-3">
-          {conversation.externalContactAvatar ? (
-            <img
-              src={conversation.externalContactAvatar}
-              alt={displayName}
-              className="w-12 h-12 rounded-full object-cover"
-            />
-          ) : (
-            <div className="w-12 h-12 rounded-full bg-[var(--color-muted)] flex items-center justify-center">
-              <User className="w-6 h-6 text-[var(--color-text-muted)]" />
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-[var(--color-text-primary)] truncate">
-              {displayName}
-            </h3>
-            <p className="text-xs text-[var(--color-text-muted)] capitalize">
-              {conversation.channelType}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Contact Info */}
-        <div>
-          <h4 className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wider mb-2">
-            Informações
-          </h4>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <Phone className="w-4 h-4 text-[var(--color-text-muted)]" />
-              <span className="text-[var(--color-text-secondary)]">
-                {conversation.externalContactId}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <MessageSquare className="w-4 h-4 text-[var(--color-text-muted)]" />
-              <span className="text-[var(--color-text-secondary)]">
-                {conversation.channelName}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Actions placeholder */}
-        <div>
-          <h4 className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wider mb-2">
-            Ações Rápidas
-          </h4>
-          <div className="space-y-2">
-            <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded-lg hover:bg-[var(--color-muted)] transition-colors">
-              <User className="w-4 h-4 text-[var(--color-text-muted)]" />
-              <span className="text-[var(--color-text-secondary)]">Ver contato</span>
-            </button>
-            <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded-lg hover:bg-[var(--color-muted)] transition-colors">
-              <Building2 className="w-4 h-4 text-[var(--color-text-muted)]" />
-              <span className="text-[var(--color-text-secondary)]">Vincular a deal</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+  const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>(
+    initialConversationId || conversationIdParam || undefined
   );
-}
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
 
-// =============================================================================
-// EMPTY THREAD STATE
-// =============================================================================
+  // Subscribe to realtime updates
+  useRealtimeSyncMessaging();
 
-function EmptyThreadState() {
-  return (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="text-center p-8">
-        <div className="w-16 h-16 rounded-full bg-[var(--color-muted)] flex items-center justify-center mx-auto mb-4">
-          <MessageSquare className="w-8 h-8 text-[var(--color-text-muted)]" />
-        </div>
-        <h3 className="text-lg font-medium text-[var(--color-text-primary)] mb-1">
-          Selecione uma conversa
-        </h3>
-        <p className="text-sm text-[var(--color-text-muted)]">
-          Escolha uma conversa da lista para ver as mensagens
-        </p>
-      </div>
-    </div>
-  );
-}
+  // Fetch selected conversation details
+  const { data: selectedConversation, isLoading: isConversationLoading } = useConversation(selectedConversationId);
 
-// =============================================================================
-// CONVERSATION HEADER
-// =============================================================================
+  // Mutations
+  const { mutate: markAsRead } = useMarkConversationRead();
+  const { mutate: resolveConversation } = useResolveConversation();
 
-interface ConversationHeaderProps {
-  conversation: {
-    externalContactName?: string;
-    externalContactId: string;
-    externalContactAvatar?: string;
-    channelType: string;
-  };
-}
-
-function ConversationHeader({ conversation }: ConversationHeaderProps) {
-  const displayName = conversation.externalContactName || conversation.externalContactId;
-
-  return (
-    <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-[var(--color-border)]">
-      {conversation.externalContactAvatar ? (
-        <img
-          src={conversation.externalContactAvatar}
-          alt={displayName}
-          className="w-10 h-10 rounded-full object-cover"
-        />
-      ) : (
-        <div className="w-10 h-10 rounded-full bg-[var(--color-muted)] flex items-center justify-center">
-          <User className="w-5 h-5 text-[var(--color-text-muted)]" />
-        </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <h2 className="text-sm font-semibold text-[var(--color-text-primary)] truncate">
-          {displayName}
-        </h2>
-        <p className="text-xs text-[var(--color-text-muted)] capitalize">
-          {conversation.channelType}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// =============================================================================
-// MAIN PAGE
-// =============================================================================
-
-export function MessagingPage() {
-  const {
-    // Conversations
-    conversations,
-    conversationsLoading,
-    selectedConversationId,
-    selectConversation,
-    selectedConversation,
-
-    // Messages
-    messages,
-    messagesLoading,
-    hasMoreMessages,
-    isFetchingMoreMessages,
-    loadMoreMessages,
-
-    // Actions
-    sendMessage,
-    markAsRead,
-
-    // Window state
-    windowExpired,
-    windowExpiresAt,
-  } = useMessagingController();
-
-  // Mark as read when conversation changes
+  // Mark as read when opening a conversation
   useEffect(() => {
-    if (selectedConversationId && selectedConversation?.unreadCount) {
-      markAsRead();
+    if (selectedConversationId && selectedConversation && selectedConversation.unreadCount > 0) {
+      markAsRead(selectedConversationId);
     }
-  }, [selectedConversationId, selectedConversation?.unreadCount, markAsRead]);
+  }, [selectedConversationId, selectedConversation, markAsRead]);
+
+  // Update URL when conversation changes
+  const handleSelectConversation = useCallback((id: string) => {
+    setSelectedConversationId(id);
+    router.push(`/messaging?id=${id}`, { scroll: false });
+  }, [router]);
+
+  // Link conversation to contact
+  const handleLinkContact = useCallback(async (contactId: string) => {
+    if (!selectedConversationId) return;
+
+    const { error } = await supabase
+      .from('messaging_conversations')
+      .update({ contact_id: contactId })
+      .eq('id', selectedConversationId);
+
+    if (error) throw error;
+
+    // Invalidate queries to refresh data
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.messagingConversations.all,
+    });
+  }, [selectedConversationId, queryClient]);
+
+  // Create contact and link
+  const handleCreateContact = useCallback(async (params: { name: string; phone?: string }) => {
+    if (!profile?.organization_id) throw new Error('Organization not found');
+
+    const { data: contact, error: createError } = await supabase
+      .from('contacts')
+      .insert({
+        name: params.name,
+        phone: params.phone,
+        organization_id: profile.organization_id,
+      })
+      .select('id')
+      .single();
+
+    if (createError) throw createError;
+    return contact.id;
+  }, [profile?.organization_id]);
+
+  // View contact in CRM
+  const handleViewContact = useCallback((contactId: string) => {
+    router.push(`/contacts?id=${contactId}`);
+  }, [router]);
+
+  // View deals for contact
+  const handleViewDeals = useCallback((contactId: string) => {
+    router.push(`/boards?contact=${contactId}`);
+  }, [router]);
 
   return (
-    <div className="h-[calc(100vh-64px)] flex overflow-hidden">
-      {/* Conversation List - Left Panel */}
-      <div className="w-80 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-surface)]">
+    <div className="h-[calc(100vh-4rem)] flex">
+      {/* Conversation List */}
+      <div className="w-80 flex-shrink-0">
         <ConversationList
-          conversations={conversations}
-          isLoading={conversationsLoading}
-          activeConversationId={selectedConversationId || undefined}
-          onSelectConversation={selectConversation}
+          selectedId={selectedConversationId}
+          onSelect={handleSelectConversation}
         />
       </div>
 
-      {/* Message Thread - Center Panel */}
-      <div className="flex-1 flex flex-col min-w-0 bg-[var(--color-bg)]">
+      {/* Message Thread */}
+      <div className="flex-1 flex flex-col bg-slate-50 dark:bg-slate-900/50">
         {selectedConversation ? (
           <>
-            <ConversationHeader conversation={selectedConversation} />
-            <MessageThread
-              messages={messages}
-              isLoading={messagesLoading}
-              hasMore={hasMoreMessages}
-              isFetchingMore={isFetchingMoreMessages}
-              onLoadMore={loadMoreMessages}
-              className="flex-1"
-            />
-            <MessageInput
-              onSend={sendMessage}
-              windowExpired={windowExpired}
-              windowExpiresAt={windowExpiresAt}
-            />
+            {/* Header */}
+            <div className="h-16 px-4 flex items-center gap-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-white/10">
+              <div className="relative">
+                {sanitizeUrl(selectedConversation.externalContactAvatar) ? (
+                  <img
+                    src={sanitizeUrl(selectedConversation.externalContactAvatar)}
+                    alt={selectedConversation.externalContactName || 'Contato'}
+                    className="w-10 h-10 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                    <User className="w-5 h-5 text-slate-400" />
+                  </div>
+                )}
+                <div className="absolute -bottom-0.5 -right-0.5">
+                  <ChannelIndicator type={selectedConversation.channelType} size="sm" />
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="font-semibold text-slate-900 dark:text-white truncate">
+                  {selectedConversation.contactName || selectedConversation.externalContactName || 'Contato desconhecido'}
+                </h2>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {selectedConversation.channelName}
+                  </p>
+                  <WindowExpiryBadge
+                    windowExpiresAt={selectedConversation.windowExpiresAt}
+                    variant="inline"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedConversation.status === 'open' && (
+                  <button
+                    type="button"
+                    onClick={() => resolveConversation(selectedConversation.id)}
+                    className="p-2 text-slate-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-500/10 rounded-lg transition-colors"
+                    title="Marcar como resolvida"
+                  >
+                    <CheckCircle className="w-5 h-5" />
+                  </button>
+                )}
+                {!selectedConversation.contactId && (
+                  <button
+                    type="button"
+                    onClick={() => setIsLinkModalOpen(true)}
+                    className="p-2 text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-500/10 rounded-lg transition-colors"
+                    title="Vincular contato"
+                  >
+                    <LinkIcon className="w-5 h-5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <MessageThread conversationId={selectedConversation.id} />
+
+            {/* Input */}
+            <MessageInput conversation={selectedConversation} />
           </>
         ) : (
-          <EmptyThreadState />
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
+            <MessageSquare className="w-16 h-16 mb-4 opacity-50" />
+            <p className="text-lg">Selecione uma conversa</p>
+            <p className="text-sm">Escolha uma conversa da lista para visualizar</p>
+          </div>
         )}
       </div>
 
-      {/* Contact Panel - Right Panel */}
-      <div className="w-72 shrink-0 border-l border-[var(--color-border)] bg-[var(--color-surface)] hidden xl:block">
-        <ContactPanel conversation={selectedConversation} />
+      {/* Contact Panel */}
+      <div className="w-80 border-l border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 flex-shrink-0">
+        <ContactPanel
+          conversation={selectedConversation}
+          isLoading={isConversationLoading && !!selectedConversationId}
+          onLinkContact={() => setIsLinkModalOpen(true)}
+          onViewContact={handleViewContact}
+          onViewDeals={handleViewDeals}
+        />
       </div>
+
+      {/* Contact Link Modal */}
+      <ContactLinkModal
+        isOpen={isLinkModalOpen}
+        onClose={() => setIsLinkModalOpen(false)}
+        onLinkContact={handleLinkContact}
+        onCreateContact={handleCreateContact}
+        currentContactId={selectedConversation?.contactId}
+        suggestedPhone={selectedConversation?.contactPhone || undefined}
+        suggestedName={selectedConversation?.externalContactName || undefined}
+      />
     </div>
   );
 }
