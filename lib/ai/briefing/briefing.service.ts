@@ -117,47 +117,63 @@ async function buildDealContext(
     return null;
   }
 
-  // 2. Fetch organization
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id, name')
-    .eq('id', deal.organization_id)
-    .single();
+  const stageData = deal.stage as unknown as { id: string; name: string; board_id: string };
 
+  // 2. Parallelizar queries independentes após obter deal
+  const [orgResult, contactResult, conversationsResult, stageConfigResult] = await Promise.all([
+    // 2a. Fetch organization
+    supabase
+      .from('organizations')
+      .select('id, name')
+      .eq('id', deal.organization_id)
+      .single(),
+
+    // 2b. Fetch contact (se vinculado)
+    deal.contact_id
+      ? supabase
+          .from('contacts')
+          .select('name, email, phone, company_name, position')
+          .eq('id', deal.contact_id)
+          .single()
+      : Promise.resolve({ data: null }),
+
+    // 2c. Find conversation for this deal
+    supabase
+      .from('messaging_conversations')
+      .select('id')
+      .contains('metadata', { deal_id: dealId })
+      .limit(1),
+
+    // 2d. Fetch stage config
+    supabase
+      .from('stage_ai_config')
+      .select('stage_goal, advancement_criteria')
+      .eq('stage_id', stageData.id)
+      .single(),
+  ]);
+
+  const org = orgResult.data;
   if (!org) {
     console.error('[Briefing] Organization not found');
     return null;
   }
 
-  // 3. Fetch contact
+  // 3. Processar contato
   let contact: DealContext['contact'] = null;
-  if (deal.contact_id) {
-    const { data: contactData } = await supabase
-      .from('contacts')
-      .select('name, email, phone, company, position')
-      .eq('id', deal.contact_id)
-      .single();
-
-    if (contactData) {
-      contact = {
-        name: contactData.name,
-        email: contactData.email,
-        phone: contactData.phone,
-        company: contactData.company,
-        position: contactData.position,
-      };
-    }
+  if (contactResult.data) {
+    const contactData = contactResult.data;
+    contact = {
+      name: contactData.name,
+      email: contactData.email,
+      phone: contactData.phone,
+      company: contactData.company_name,
+      position: contactData.position,
+    };
   }
 
-  // 4. Find conversation for this deal
-  const { data: conversations } = await supabase
-    .from('messaging_conversations')
-    .select('id')
-    .contains('metadata', { deal_id: dealId })
-    .limit(1);
-
-  // 5. Fetch messages if conversation exists
+  // 4. Fetch messages (depende de conversations — sequencial)
   let messages: DealContext['messages'] = [];
+  const conversations = conversationsResult.data;
   if (conversations && conversations.length > 0) {
     const { data: messagesData } = await supabase
       .from('messaging_messages')
@@ -176,13 +192,7 @@ async function buildDealContext(
     }
   }
 
-  // 6. Fetch stage config
-  const stageData = deal.stage as unknown as { id: string; name: string; board_id: string };
-  const { data: stageConfig } = await supabase
-    .from('stage_ai_config')
-    .select('stage_goal, advancement_criteria')
-    .eq('stage_id', stageData.id)
-    .single();
+  const stageConfig = stageConfigResult.data;
 
   return {
     deal: {

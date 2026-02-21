@@ -180,6 +180,11 @@ Avalie cada critério de avanço e decida se o lead deve avançar para o próxim
 
     const evaluation = result.output;
 
+    if (!evaluation) {
+      console.warn('[StageEvaluator] AI returned no structured output');
+      return { success: false, error: 'AI não retornou avaliação estruturada' };
+    }
+
     console.log('[StageEvaluator] Evaluation result:', {
       shouldAdvance: evaluation.shouldAdvance,
       confidence: evaluation.overallConfidence,
@@ -237,6 +242,7 @@ Avalie cada critério de avanço e decida se o lead deve avançar para o próxim
 
       await logStageAdvancement(supabase, {
         dealId: context.deal.id,
+        organizationId: params.organizationId,
         fromStageId: context.deal.stage_id,
         toStageId: nextStageResult.nextStageId,
         evaluation,
@@ -352,17 +358,19 @@ async function logStageAdvancement(
   supabase: SupabaseClient,
   params: {
     dealId: string;
+    organizationId: string;
     fromStageId: string;
     toStageId: string;
     evaluation: StageAdvancementEvaluation;
     triggeredBy: string;
   }
 ): Promise<void> {
-  const { dealId, fromStageId, toStageId, evaluation, triggeredBy } = params;
+  const { dealId, organizationId, fromStageId, toStageId, evaluation, triggeredBy } = params;
 
   await supabase.from('deal_activities').insert({
     deal_id: dealId,
-    activity_type: 'stage_change',
+    organization_id: organizationId,
+    type: 'stage_change',
     description: `Estágio avançado automaticamente pelo AI Agent`,
     metadata: {
       from_stage_id: fromStageId,

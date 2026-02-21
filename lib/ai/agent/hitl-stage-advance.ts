@@ -267,14 +267,15 @@ export async function resolvePendingAdvance(
   const finalReason = userEdits.reason || pending.reason;
   const wasEdited = userEdits.targetStageId !== undefined || userEdits.reason !== undefined;
 
-  // 5. Atualizar deal para novo estágio
+  // 5. Atualizar deal para novo estágio (defense-in-depth: org_id filter)
   const { error: updateError } = await supabase
     .from('deals')
     .update({
       stage_id: finalStageId,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', pending.deal_id);
+    .eq('id', pending.deal_id)
+    .eq('organization_id', pending.organization_id);
 
   if (updateError) {
     return { success: false, error: `Falha ao atualizar deal: ${updateError.message}` };
@@ -303,7 +304,8 @@ export async function resolvePendingAdvance(
   // 7. Registrar atividade no deal
   await supabase.from('deal_activities').insert({
     deal_id: pending.deal_id,
-    activity_type: 'stage_change',
+    organization_id: pending.organization_id,
+    type: 'stage_change',
     description: wasEdited
       ? `Estágio avançado (aprovado com edições): ${finalReason}`
       : `Estágio avançado (aprovado): ${finalReason}`,
@@ -353,7 +355,9 @@ export async function getPendingAdvances(
   }
 
   if (options?.status === 'pending') {
-    query = query.eq('status', 'pending');
+    query = query
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString());
   }
 
   const { data, error } = await query;

@@ -168,11 +168,15 @@ export async function fetchConversationsForLearning(
     result.push({
       id: conv.id,
       title: dealInfo?.title || contactInfo?.name || 'Conversa',
-      messages: (messages || []).map((m) => ({
-        role: m.direction === 'outbound' ? 'assistant' : 'user',
-        content: m.content,
-        timestamp: m.created_at,
-      })),
+      messages: (messages || []).map((m) => {
+        const raw = m.content as Record<string, unknown> | string | null;
+        const text = typeof raw === 'string' ? raw : (raw?.text as string) || '';
+        return {
+          role: m.direction === 'outbound' ? 'assistant' as const : 'user' as const,
+          content: text,
+          timestamp: m.created_at,
+        };
+      }),
       outcome: dealInfo?.status === 'won' ? 'won' : dealInfo?.status === 'lost' ? 'lost' : 'in_progress',
       dealValue: dealInfo?.value,
     });
@@ -297,8 +301,8 @@ export async function getLearnedPatterns(
     return null;
   }
 
-  // Verificar se tem as propriedades essenciais
-  if (!patterns.greetingStyle && !patterns.learnedCriteria) {
+  // Verificar com validação completa ao invés de cast direto
+  if (!validateLearnedPatterns(patterns)) {
     return null;
   }
 

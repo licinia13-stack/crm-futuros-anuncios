@@ -7,18 +7,18 @@
  * @module lib/ai/agent/agent.service
  */
 
-import { generateText } from 'ai';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getModel, type AIProvider } from '../config';
+import { type AIProvider } from '../config';
 import { AI_DEFAULT_MODELS, AI_DEFAULT_PROVIDER } from '../defaults';
+import { generateWithFailover, buildProviderList } from './provider-failover';
+import { checkRateLimit, recordRateCall } from './rate-limiter';
+import { checkTokenBudget } from './token-budget';
 import { buildLeadContext, formatContextForPrompt } from './context-builder';
 import { getChannelRouter } from '@/lib/messaging/channel-router.service';
 import { evaluateStageAdvancement } from './stage-evaluator';
 import { extractAndUpdateBANT } from '../extraction/extraction.service';
 import {
   buildConversationalPromptFromPatterns,
-  getDefaultLearnedPatterns,
-  type DynamicEvaluationResult,
 } from './generative-schema';
 import type { LearnedPattern } from './few-shot-learner';
 import type {
@@ -45,6 +45,7 @@ export interface OrgAIConfig {
   templateId: string | null;
   takeoverEnabled: boolean;
   takeoverMinutes: number;
+  allKeys: Record<AIProvider, string | null>;
 }
 
 /**
@@ -117,6 +118,11 @@ export async function getOrgAIConfig(
     templateId: orgSettings.ai_template_id || null,
     takeoverEnabled: orgSettings.ai_takeover_enabled === true,
     takeoverMinutes: orgSettings.ai_takeover_minutes ?? 15,
+    allKeys: {
+      google: orgSettings.ai_google_key || null,
+      openai: orgSettings.ai_openai_key || null,
+      anthropic: orgSettings.ai_anthropic_key || null,
+    },
   };
 }
 
@@ -159,6 +165,19 @@ export async function processIncomingMessage(
 
   console.log('[AIAgent] Processing message:', { conversationId, messageId });
 
+  // 0a. Rate limit check (per-conversation)
+  const rateCheck = checkRateLimit(conversationId);
+  if (!rateCheck.allowed) {
+    console.warn('[AIAgent] Rate limited for conversation:', conversationId);
+    return {
+      success: true,
+      decision: {
+        action: 'skipped',
+        reason: `Rate limit: aguarde ${Math.ceil((rateCheck.retryAfterMs || 0) / 1000)}s`,
+      },
+    };
+  }
+
   // 1. Buscar deal associado à conversa para pegar o stage + assignment
   const { data: conversation } = await supabase
     .from('messaging_conversations')
@@ -166,7 +185,20 @@ export async function processIncomingMessage(
     .eq('id', conversationId)
     .single();
 
-  const dealId = (conversation?.metadata as Record<string, unknown>)?.deal_id as string | undefined;
+  // 0b. Check if AI is paused for this conversation
+  const conversationMetadata = (conversation?.metadata || {}) as Record<string, unknown>;
+  if (conversationMetadata.ai_paused === true) {
+    console.log('[AIAgent] AI paused for this conversation:', conversationId);
+    return {
+      success: true,
+      decision: {
+        action: 'skipped',
+        reason: 'AI pausado para esta conversa',
+      },
+    };
+  }
+
+  const dealId = conversationMetadata.deal_id as string | undefined;
 
   if (!dealId) {
     console.log('[AIAgent] No deal associated, skipping AI processing');
@@ -217,8 +249,11 @@ export async function processIncomingMessage(
 
   const config = stageConfig as StageAIConfig;
 
-  // 4. Buscar configuração de AI da organização
-  const aiConfig = await getOrgAIConfig(supabase, organizationId);
+  // 4. Buscar configuração de AI e token budget em paralelo
+  const [aiConfig, budgetCheck] = await Promise.all([
+    getOrgAIConfig(supabase, organizationId),
+    checkTokenBudget(supabase, organizationId),
+  ]);
 
   if (!aiConfig) {
     console.log('[AIAgent] No AI config found for organization');
@@ -238,6 +273,18 @@ export async function processIncomingMessage(
       decision: {
         action: 'skipped',
         reason: 'AI desabilitado para esta organização',
+      },
+    };
+  }
+
+  // 4a-2. Token budget check (já resolvido acima via Promise.all)
+  if (!budgetCheck.allowed) {
+    console.warn('[AIAgent] Token budget exceeded:', budgetCheck);
+    return {
+      success: true,
+      decision: {
+        action: 'skipped',
+        reason: `Limite mensal de tokens excedido (${budgetCheck.used.toLocaleString()}/${budgetCheck.limit.toLocaleString()})`,
       },
     };
   }
@@ -290,7 +337,7 @@ export async function processIncomingMessage(
   if (context.stats.ai_messages_count >= config.settings.max_messages_per_conversation) {
     return {
       success: true,
-      decision: await handleHandoff(supabase, conversationId, context, 'Limite de mensagens atingido'),
+      decision: await handleHandoff(supabase, conversationId, organizationId, context, 'Limite de mensagens atingido'),
     };
   }
 
@@ -302,6 +349,7 @@ export async function processIncomingMessage(
       decision: await handleHandoff(
         supabase,
         conversationId,
+        organizationId,
         context,
         `Keyword de handoff detectada: "${handoffKeyword}"`
       ),
@@ -326,6 +374,11 @@ export async function processIncomingMessage(
     incomingMessage,
     aiConfig,
   });
+
+  // Record rate call only on actual AI response (not on skipped/handoff)
+  if (decision.action === 'responded') {
+    recordRateCall(conversationId);
+  }
 
   // 10. Se deve responder, enviar mensagem
   if (decision.action === 'responded' && decision.response) {
@@ -453,17 +506,19 @@ Responda de forma natural, seguindo as instruções do sistema.
     // Usar model do stage se definido, senão usar config da organização
     const modelId = stageConfig.ai_model || aiConfig.model;
 
-    const model = getModel(
-      aiConfig.provider,
-      aiConfig.apiKey,
-      modelId
-    );
+    // Build provider list with failover (primary first, then others with keys)
+    const providers = buildProviderList({
+      provider: aiConfig.provider,
+      apiKey: aiConfig.apiKey,
+      model: modelId,
+      allKeys: aiConfig.allKeys,
+    });
 
-    const result = await generateText({
-      model,
+    const result = await generateWithFailover({
+      providers,
       system: systemPrompt,
       prompt: userPrompt,
-      maxRetries: 3,
+      maxRetries: 2,
     });
 
     return {
@@ -471,10 +526,10 @@ Responda de forma natural, seguindo as instruções do sistema.
       response: result.text.trim(),
       reason: 'Resposta gerada com sucesso',
       tokens_used: result.usage?.totalTokens,
-      model_used: modelId,
+      model_used: result.modelUsed || modelId,
     };
   } catch (error) {
-    console.error('[AIAgent] Error generating response:', error);
+    console.error('[AIAgent] All providers failed:', error);
     return {
       action: 'skipped',
       reason: `Erro na geração: ${error instanceof Error ? error.message : 'Unknown'}`,
@@ -687,21 +742,79 @@ async function sendAIResponse(params: {
 async function handleHandoff(
   supabase: SupabaseClient,
   conversationId: string,
+  organizationId: string,
   context: LeadContext,
   reason: string
 ): Promise<AgentDecision> {
+  const now = new Date().toISOString();
+
+  // Fetch existing metadata to merge (never overwrite)
+  const { data: existing } = await supabase
+    .from('messaging_conversations')
+    .select('metadata')
+    .eq('id', conversationId)
+    .single();
+
+  const existingMetadata = (existing?.metadata as Record<string, unknown>) ?? {};
+
   // Atualizar conversa para marcar handoff pendente
   await supabase
     .from('messaging_conversations')
     .update({
       metadata: {
-        ...(context.deal ? {} : {}),
+        ...existingMetadata,
         ai_handoff_pending: true,
         ai_handoff_reason: reason,
-        ai_handoff_at: new Date().toISOString(),
+        ai_handoff_at: now,
       },
     })
     .eq('id', conversationId);
+
+  // Log handoff as deal activity
+  if (context.deal?.id) {
+    await supabase.from('deal_activities').insert({
+      deal_id: context.deal.id,
+      organization_id: organizationId,
+      type: 'ai_handoff',
+      description: `AI encaminhou conversa para operador humano: ${reason}`,
+      metadata: {
+        ai_handoff: true,
+        reason,
+        conversationId,
+      },
+    }).then(({ error }) => {
+      if (error) console.error('[AIAgent] Failed to log handoff activity:', error);
+    });
+  }
+
+  // Broadcast handoff notification via Supabase Realtime
+  const channel = supabase.channel(`org:${organizationId}:notifications`);
+  try {
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => resolve(), 5000);
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    });
+    await channel.send({
+      type: 'broadcast',
+      event: 'ai_handoff',
+      payload: {
+        conversationId,
+        dealId: context.deal?.id,
+        contactName: context.contact?.name || 'Desconhecido',
+        reason,
+        timestamp: now,
+      },
+    });
+  } catch (err) {
+    console.error('[AIAgent] Failed to broadcast handoff notification:', err);
+  } finally {
+    supabase.removeChannel(channel);
+  }
 
   return {
     action: 'handoff',
@@ -783,11 +896,27 @@ function checkHandoffKeywords(message: string, keywords: string[]): string | nul
   return null;
 }
 
-function isBusinessHours(hours?: { start: string; end: string; timezone: string }): boolean {
+function isBusinessHours(hours?: { start: string; end: string; timezone: string; daysOfWeek?: number[] }): boolean {
   if (!hours) return true;
 
   try {
     const now = new Date();
+
+    // Check day of week (0=Sunday, 6=Saturday)
+    const dayFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: hours.timezone,
+      weekday: 'short',
+    });
+    const dayStr = dayFormatter.format(now);
+    const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const currentDay = dayMap[dayStr] ?? now.getDay();
+
+    // Default: Mon-Fri (1-5) if daysOfWeek not specified
+    const allowedDays = hours.daysOfWeek ?? [1, 2, 3, 4, 5];
+    if (!allowedDays.includes(currentDay)) {
+      return false;
+    }
+
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: hours.timezone,
       hour: '2-digit',
@@ -819,16 +948,20 @@ async function getConversationHistory(
   conversationId: string,
   limit: number = 20
 ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+  // Fetch most recent messages (DESC) then reverse for chronological order
   const { data: messages } = await supabase
     .from('messaging_messages')
     .select('direction, content, created_at')
     .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(limit);
 
   if (!messages || messages.length === 0) {
     return [];
   }
+
+  // Reverse to chronological order (oldest first)
+  messages.reverse();
 
   return messages.map((msg) => ({
     role: msg.direction === 'inbound' ? 'user' as const : 'assistant' as const,

@@ -425,7 +425,7 @@ async function fetchUnresolvedConversations(
     `
     )
     .eq('organization_id', organizationId)
-    .eq('status', 'active')
+    .eq('status', 'open')
     .gt('unread_count', 0)
     .order('last_message_at', { ascending: false })
     .limit(10);
@@ -486,24 +486,29 @@ async function searchRelevantHistory(
     `
     )
     .eq('messaging_conversations.contact_id', contactId)
-    .textSearch('content', query, { type: 'websearch' })
-    .limit(5);
+    .order('created_at', { ascending: false })
+    .limit(20);
 
   if (messages) {
+    // Filter messages client-side since content is JSONB (textSearch doesn't work on JSONB)
+    const queryLower = query.toLowerCase();
     for (const msg of messages) {
       const content = msg.content as Record<string, unknown> | null;
       const text = typeof content === 'string' ? content : (content?.text as string) || '';
 
-      results.push({
-        type: 'message',
-        content: text.substring(0, 200),
-        date: msg.created_at,
-        relevanceScore: 0.8, // Placeholder - calcular relevância real
-      });
+      if (text.toLowerCase().includes(queryLower)) {
+        results.push({
+          type: 'message',
+          content: text.substring(0, 200),
+          date: msg.created_at,
+          relevanceScore: 0.8,
+        });
+        if (results.length >= 5) break;
+      }
     }
   }
 
-  // 2. Buscar em notas de deals
+  // 2. Buscar em notas de deals (client-side filter — no tsvector index on deal_notes)
   const { data: notes } = await supabase
     .from('deal_notes')
     .select(
@@ -514,17 +519,22 @@ async function searchRelevantHistory(
     `
     )
     .eq('deals.contact_id', contactId)
-    .textSearch('content', query, { type: 'websearch' })
-    .limit(3);
+    .order('created_at', { ascending: false })
+    .limit(20);
 
   if (notes) {
+    const queryLower = query.toLowerCase();
     for (const note of notes) {
-      results.push({
-        type: 'note',
-        content: (note.content as string).substring(0, 200),
-        date: note.created_at,
-        relevanceScore: 0.7,
-      });
+      const noteContent = (note.content as string) || '';
+      if (noteContent.toLowerCase().includes(queryLower)) {
+        results.push({
+          type: 'note',
+          content: noteContent.substring(0, 200),
+          date: note.created_at,
+          relevanceScore: 0.7,
+        });
+        if (results.filter((r) => r.type === 'note').length >= 3) break;
+      }
     }
   }
 

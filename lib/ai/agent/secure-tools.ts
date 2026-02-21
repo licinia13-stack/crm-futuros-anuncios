@@ -18,6 +18,7 @@
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AIProvider } from '../config';
+import { sanitizePostgrestValue } from '@/lib/utils/sanitize';
 
 // =============================================================================
 // Types
@@ -200,7 +201,9 @@ export function createSecureToolCollection(context: ToolContext) {
 
         // Filtro de texto
         if (params.query) {
-          query = query.ilike('title', `%${params.query}%`);
+          const sanitized = sanitizePostgrestValue(params.query);
+          const safeQuery = sanitized.replace(/[%_\\]/g, (c) => `\\${c}`);
+          query = query.ilike('title', `%${safeQuery}%`);
         }
 
         // Filtro de status
@@ -302,6 +305,20 @@ export function createSecureToolCollection(context: ToolContext) {
           };
         }
 
+        // Validar que o estágio destino pertence ao mesmo board do deal atual
+        const { data: currentStage } = await supabase
+          .from('board_stages')
+          .select('board_id')
+          .eq('id', deal.stage_id)
+          .single();
+
+        if (currentStage && targetStage.board_id !== currentStage.board_id) {
+          return {
+            success: false,
+            error: { code: 'INVALID_STAGE', message: 'Estágio destino pertence a outro board' },
+          };
+        }
+
         // Atualizar deal
         const { error: updateError } = await supabase
           .from('deals')
@@ -309,7 +326,8 @@ export function createSecureToolCollection(context: ToolContext) {
             stage_id: finalStageId,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', params.dealId);
+          .eq('id', params.dealId)
+          .eq('organization_id', organizationId);
 
         if (updateError) {
           return {
@@ -321,7 +339,8 @@ export function createSecureToolCollection(context: ToolContext) {
         // Registrar atividade
         await supabase.from('deal_activities').insert({
           deal_id: params.dealId,
-          activity_type: 'stage_change',
+          organization_id: organizationId,
+          type: 'stage_change',
           description: userEdits
             ? `Estágio avançado (aprovado por usuário): ${finalReason}`
             : `Estágio avançado automaticamente: ${finalReason}`,
@@ -418,7 +437,7 @@ export function createSecureToolCollection(context: ToolContext) {
           .insert({
             conversation_id: params.conversationId,
             direction: 'outbound',
-            content: finalContent,
+            content: { type: 'text', text: finalContent },
             content_type: 'text',
             status: 'pending',
             sender_type: 'agent',
@@ -502,7 +521,7 @@ export function createSecureToolCollection(context: ToolContext) {
         // Buscar últimas atividades
         const { data: activities } = await supabase
           .from('deal_activities')
-          .select('id, activity_type, description, created_at')
+          .select('id, type, description, created_at')
           .eq('deal_id', params.dealId)
           .order('created_at', { ascending: false })
           .limit(5);
@@ -531,12 +550,16 @@ export function createSecureToolCollection(context: ToolContext) {
           throw new ToolPermissionError('Sem permissão para acessar contatos');
         }
 
+        // Sanitize for PostgREST filter syntax (strips , . ( ) * \)
+        // then also escape SQL ILIKE wildcards (% _)
+        const safeQuery = sanitizePostgrestValue(params.query).replace(/[%_]/g, (c: string) => `\\${c}`);
+
         const { data, error } = await supabase
           .from('contacts')
           .select('id, name, email, phone, company_name, lifecycle_stage, created_at')
           .eq('organization_id', organizationId) // SEMPRE filtrado!
           .is('deleted_at', null)
-          .or(`name.ilike.%${params.query}%,email.ilike.%${params.query}%,phone.ilike.%${params.query}%`)
+          .or(`name.ilike.%${safeQuery}%,email.ilike.%${safeQuery}%,phone.ilike.%${safeQuery}%`)
           .limit(params.limit || 5);
 
         if (error) {

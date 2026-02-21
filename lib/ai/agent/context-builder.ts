@@ -66,32 +66,72 @@ export async function buildLeadContext(
     return null;
   }
 
-  // 2. Buscar contato (se vinculado)
-  let contact: LeadContext['contact'] = null;
-  if (conversation.contact_id) {
-    const { data: contactData } = await supabase
-      .from('contacts')
-      .select('id, name, email, phone, company, position, custom_fields')
-      .eq('id', conversation.contact_id)
-      .single();
+  // 2. Parallelizar queries independentes após obter conversation
+  const dealId = (conversation.metadata as Record<string, unknown>)?.deal_id as string | undefined;
 
-    if (contactData) {
-      contact = {
-        id: contactData.id,
-        name: contactData.name,
-        email: contactData.email,
-        phone: contactData.phone,
-        company: contactData.company,
-        position: contactData.position,
-        custom_fields: contactData.custom_fields as Record<string, unknown> | undefined,
-      };
-    }
+  const [contactResult, dealResult, messagesResult, orgResult] = await Promise.all([
+    // 2a. Buscar contato (se vinculado)
+    conversation.contact_id
+      ? supabase
+          .from('contacts')
+          .select('id, name, email, phone, company_name, role, notes')
+          .eq('id', conversation.contact_id)
+          .single()
+      : Promise.resolve({ data: null }),
+
+    // 2b. Buscar deal associado via metadata
+    dealId
+      ? supabase
+          .from('deals')
+          .select(`
+            id,
+            title,
+            value,
+            ai_summary,
+            created_at,
+            stage:board_stages!inner(
+              id,
+              name
+            )
+          `)
+          .eq('id', dealId)
+          .single()
+      : Promise.resolve({ data: null }),
+
+    // 2c. Buscar histórico de mensagens
+    supabase
+      .from('messaging_messages')
+      .select('direction, content, created_at, metadata')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false })
+      .limit(MAX_MESSAGES_IN_CONTEXT),
+
+    // 2d. Buscar organização
+    supabase
+      .from('organizations')
+      .select('name')
+      .eq('id', organizationId)
+      .single(),
+  ]);
+
+  // 3. Processar contato
+  let contact: LeadContext['contact'] = null;
+  if (contactResult.data) {
+    const contactData = contactResult.data;
+    contact = {
+      id: contactData.id,
+      name: contactData.name,
+      email: contactData.email,
+      phone: contactData.phone,
+      company: contactData.company_name,
+      position: contactData.role,
+    };
   }
 
   // Se não tem contato vinculado, usar dados da conversa
   if (!contact) {
     contact = {
-      id: conversationId, // usar conversation id como fallback
+      id: conversationId,
       name: conversation.external_contact_name,
       email: null,
       phone: null,
@@ -100,65 +140,38 @@ export async function buildLeadContext(
     };
   }
 
-  // 3. Buscar deal associado via metadata
+  // 4. Processar deal
   let deal: LeadContext['deal'] = null;
-  const dealId = (conversation.metadata as Record<string, unknown>)?.deal_id as string | undefined;
-
-  if (dealId) {
-    const { data: dealData } = await supabase
-      .from('deals')
-      .select(`
-        id,
-        title,
-        value,
-        ai_summary,
-        created_at,
-        stage:board_stages!inner(
-          id,
-          name
-        )
-      `)
-      .eq('id', dealId)
-      .single();
-
-    if (dealData) {
-      // Stage from join can be object or array depending on Supabase types
-      const stageData = dealData.stage as unknown as { id: string; name: string } | null;
-      deal = {
-        id: dealData.id,
-        title: dealData.title,
-        value: dealData.value,
-        stage_id: stageData?.id || '',
-        stage_name: stageData?.name || 'Sem estágio',
-        notes: dealData.ai_summary, // Using ai_summary as notes
-        created_at: dealData.created_at,
-      };
-    }
+  if (dealResult.data) {
+    const dealData = dealResult.data;
+    const stageData = dealData.stage as unknown as { id: string; name: string } | null;
+    deal = {
+      id: dealData.id,
+      title: dealData.title,
+      value: dealData.value,
+      stage_id: stageData?.id || '',
+      stage_name: stageData?.name || 'Sem estágio',
+      notes: dealData.ai_summary,
+      created_at: dealData.created_at,
+    };
   }
 
-  // 4. Buscar stage config (se tiver deal)
+  // 5. Buscar stage config (depende do deal) — sequencial
   let stage: LeadContext['stage'];
   if (deal) {
-    const { data: stageData } = await supabase
-      .from('board_stages')
-      .select('id, name')
-      .eq('name', deal.stage_name)
-      .single();
-
     const { data: stageConfig } = await supabase
       .from('stage_ai_config')
       .select('stage_goal, advancement_criteria')
-      .eq('stage_id', stageData?.id)
+      .eq('stage_id', deal.stage_id)
       .single();
 
     stage = {
-      id: stageData?.id || '',
+      id: deal.stage_id,
       name: deal.stage_name,
       goal: stageConfig?.stage_goal || null,
       advancement_criteria: (stageConfig?.advancement_criteria as string[]) || [],
     };
   } else {
-    // Sem deal, usar estágio padrão
     stage = {
       id: '',
       name: 'Novo Lead',
@@ -167,16 +180,9 @@ export async function buildLeadContext(
     };
   }
 
-  // 5. Buscar histórico de mensagens
-  const { data: messagesData } = await supabase
-    .from('messaging_messages')
-    .select('direction, content, created_at, metadata')
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: false })
-    .limit(MAX_MESSAGES_IN_CONTEXT);
-
-  const messages: LeadContext['messages'] = (messagesData || [])
-    .reverse() // Ordenar do mais antigo para mais recente
+  // 6. Processar mensagens
+  const messages: LeadContext['messages'] = (messagesResult.data || [])
+    .reverse()
     .map((msg) => {
       const metadata = msg.metadata as Record<string, unknown> | null;
       const isAI = metadata?.sent_by_ai === true;
@@ -188,15 +194,9 @@ export async function buildLeadContext(
       };
     });
 
-  // 6. Contar mensagens do AI
   const aiMessagesCount = messages.filter((m) => m.role === 'agent').length;
 
-  // 7. Buscar organização
-  const { data: orgData } = await supabase
-    .from('organizations')
-    .select('name')
-    .eq('id', organizationId)
-    .single();
+  const orgData = orgResult.data;
 
   // 8. Montar contexto final
   const context: LeadContext = {
