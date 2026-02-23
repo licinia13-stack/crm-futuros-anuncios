@@ -32,6 +32,7 @@ import type {
   ImageContent,
   AudioContent,
   VideoContent,
+  DocumentContent,
 } from '../../types';
 
 // =============================================================================
@@ -276,6 +277,24 @@ export class MetaInstagramProvider extends BaseChannelProvider {
             },
           },
         };
+
+      case 'document': {
+        // Instagram PDF/file support added Dec 19, 2025 (Meta API v25)
+        // @see https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging-api
+        const docContent = content as DocumentContent;
+        return {
+          ...base,
+          message: {
+            attachment: {
+              type: 'file',
+              payload: {
+                url: docContent.mediaUrl,
+                is_reusable: false,
+              },
+            },
+          },
+        };
+      }
 
       default:
         throw new Error(`Unsupported content type for Instagram: ${content.type}`);

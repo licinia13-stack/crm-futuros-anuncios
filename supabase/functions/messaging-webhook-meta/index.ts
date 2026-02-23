@@ -201,6 +201,17 @@ function normalizePhone(phone?: string): string | null {
   return digits ? `+${digits}` : null;
 }
 
+/**
+ * Detects if a wa_id value is a BSUID (Business-Scoped User ID) rather than a phone number.
+ * Meta will migrate from phone numbers to opaque BSUIDs in June 2026.
+ * BSUIDs are non-numeric strings (e.g. "BSUIDxxxxxxxxxxxxxxxxxx").
+ * Phone numbers consist only of digits (possibly with +, spaces, or dashes).
+ */
+function isBSUID(value?: string): boolean {
+  if (!value) return false;
+  return !/^\+?[\d\s\-()+]+$/.test(value);
+}
+
 function extractContent(message: MetaWebhookMessage): MessageContent {
   switch (message.type) {
     case "text":
@@ -741,8 +752,17 @@ async function handleInboundMessage(
   message: MetaWebhookMessage,
   contact?: MetaWebhookContact
 ) {
-  const phone = normalizePhone(message.from);
-  if (!phone) throw new Error("Phone number is required");
+  const rawFrom = message.from;
+  if (!rawFrom) throw new Error("Message sender (from) is required");
+
+  // Detect BSUID vs phone number (Meta migrates wa_id → BSUID in June 2026)
+  const waIsBSUID = isBSUID(rawFrom);
+  const bsuid = waIsBSUID ? rawFrom : null;
+  const phone = waIsBSUID ? null : normalizePhone(rawFrom);
+
+  // For conversation lookup, use bsuid if available, else phone
+  const externalContactId = bsuid ?? phone;
+  if (!externalContactId) throw new Error("Phone number or BSUID is required");
 
   const externalMessageId = message.id;
   const content = extractContent(message);
@@ -750,12 +770,32 @@ async function handleInboundMessage(
   const senderName = contact?.profile?.name;
 
   // Find or create conversation
-  const { data: existingConv, error: convFindErr } = await supabase
-    .from("messaging_conversations")
-    .select("id, contact_id, unread_count, message_count")
-    .eq("channel_id", channel.id)
-    .eq("external_contact_id", phone)
-    .maybeSingle();
+  // During transition: try bsuid first, then phone fallback for existing convs
+  let existingConv: { id: string; contact_id: string | null; unread_count: number; message_count: number } | null = null;
+  let convFindErr: unknown = null;
+
+  if (bsuid) {
+    // Try by BSUID first
+    const res = await supabase
+      .from("messaging_conversations")
+      .select("id, contact_id, unread_count, message_count")
+      .eq("channel_id", channel.id)
+      .eq("external_contact_id", bsuid)
+      .maybeSingle();
+    convFindErr = res.error;
+    existingConv = res.data;
+
+    // Fallback: old conversation stored by phone — skip for now (BSUIDs are opaque)
+  } else {
+    const res = await supabase
+      .from("messaging_conversations")
+      .select("id, contact_id, unread_count, message_count")
+      .eq("channel_id", channel.id)
+      .eq("external_contact_id", phone!)
+      .maybeSingle();
+    convFindErr = res.error;
+    existingConv = res.data;
+  }
 
   if (convFindErr) throw convFindErr;
 
@@ -765,38 +805,79 @@ async function handleInboundMessage(
   if (existingConv) {
     conversationId = existingConv.id;
     contactId = existingConv.contact_id;
+
+    // Backfill: if we have a BSUID now but the contact was found by phone, store bsuid
+    if (bsuid && contactId) {
+      await supabase
+        .from("contacts")
+        .update({ whatsapp_bsuid: bsuid })
+        .eq("id", contactId)
+        .is("whatsapp_bsuid", null); // Only update if not already set (avoid overwrite)
+    }
   } else {
-    // Try to find existing contact by phone (order+limit to handle duplicates)
-    const { data: existingContact } = await supabase
-      .from("contacts")
-      .select("id")
-      .eq("organization_id", channel.organization_id)
-      .eq("phone", phone)
-      .is("deleted_at", null)
-      .order("created_at")
-      .limit(1)
-      .maybeSingle();
+    // Try to find existing contact
+    let existingContact: { id: string } | null = null;
+
+    if (bsuid) {
+      // 1. Try by BSUID first
+      const res = await supabase
+        .from("contacts")
+        .select("id")
+        .eq("organization_id", channel.organization_id)
+        .eq("whatsapp_bsuid", bsuid)
+        .is("deleted_at", null)
+        .order("created_at")
+        .limit(1)
+        .maybeSingle();
+      existingContact = res.data;
+    }
+
+    if (!existingContact && phone) {
+      // 2. Fallback: look up by phone (handles transition period + phone-based wa_ids)
+      const res = await supabase
+        .from("contacts")
+        .select("id, whatsapp_bsuid")
+        .eq("organization_id", channel.organization_id)
+        .eq("phone", phone)
+        .is("deleted_at", null)
+        .order("created_at")
+        .limit(1)
+        .maybeSingle();
+      existingContact = res.data;
+
+      // Backfill BSUID on existing phone-based contact if BSUID now available
+      if (res.data && bsuid && !res.data.whatsapp_bsuid) {
+        await supabase
+          .from("contacts")
+          .update({ whatsapp_bsuid: bsuid })
+          .eq("id", res.data.id);
+      }
+    }
 
     if (existingContact) {
       contactId = existingContact.id;
     } else {
       // AUTO-CREATE CONTACT (default behavior)
-      const contactName = senderName || phone;
+      const contactName = senderName || externalContactId;
+
+      const insertData: Record<string, unknown> = {
+        organization_id: channel.organization_id,
+        name: contactName,
+        source: "whatsapp",
+        metadata: {
+          auto_created: true,
+          created_from: "messaging_webhook",
+          whatsapp_name: senderName,
+          business_unit_id: channel.business_unit_id,
+        },
+      };
+
+      if (phone) insertData.phone = phone;
+      if (bsuid) insertData.whatsapp_bsuid = bsuid;
 
       const { data: newContact, error: contactCreateErr } = await supabase
         .from("contacts")
-        .insert({
-          organization_id: channel.organization_id,
-          name: contactName,
-          phone: phone,
-          source: "whatsapp",
-          metadata: {
-            auto_created: true,
-            created_from: "messaging_webhook",
-            whatsapp_name: senderName,
-            business_unit_id: channel.business_unit_id,
-          },
-        })
+        .insert(insertData)
         .select("id")
         .single();
 
@@ -804,7 +885,7 @@ async function handleInboundMessage(
         console.error("Error auto-creating contact:", contactCreateErr);
       } else {
         contactId = newContact.id;
-        console.log(`[Webhook] Auto-created contact: ${contactId} for phone ${phone}`);
+        console.log(`[Webhook] Auto-created contact: ${contactId} for ${bsuid ? `bsuid ${bsuid}` : `phone ${phone}`}`);
       }
     }
 
@@ -815,8 +896,8 @@ async function handleInboundMessage(
         organization_id: channel.organization_id,
         channel_id: channel.id,
         business_unit_id: channel.business_unit_id,
-        external_contact_id: phone,
-        external_contact_name: senderName || phone,
+        external_contact_id: externalContactId,
+        external_contact_name: senderName || externalContactId,
         contact_id: contactId,
         status: "open",
         priority: "normal",
@@ -839,7 +920,7 @@ async function handleInboundMessage(
           boardId: routingRule.boardId,
           stageId: routingRule.stageId,
           conversationId,
-          contactName: senderName || phone,
+          contactName: senderName || externalContactId,
           businessUnitName: channel.business_unit?.name || "Sem unidade",
         });
       }

@@ -10,9 +10,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import crypto from 'crypto';
 
-// WhatsApp limits
-const MAX_IMAGE_SIZE = 16 * 1024 * 1024; // 16MB
-const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+// WhatsApp limits (Meta API v25 — https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media)
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB (Meta limit: 5MB)
+const MAX_VIDEO_SIZE = 16 * 1024 * 1024; // 16MB (Meta limit: 16MB post-processing)
 const MAX_AUDIO_SIZE = 16 * 1024 * 1024; // 16MB
 const MAX_DOCUMENT_SIZE = 100 * 1024 * 1024; // 100MB
 
