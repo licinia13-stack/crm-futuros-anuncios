@@ -42,8 +42,8 @@ export const useDeals = (filters?: DealsFilters) => {
     queryKey: filters
       ? queryKeys.deals.list(filters as Record<string, unknown>)
       : queryKeys.deals.lists(),
-    queryFn: async () => {
-      const { data, error } = await dealsService.getAll();
+    queryFn: async ({ signal }) => {
+      const { data, error } = await dealsService.getAll({ signal });
       if (error) throw error;
 
       let deals = data || [];
@@ -81,11 +81,11 @@ export const useDealsView = (filters?: DealsFilters) => {
     queryKey: filters
       ? [...queryKeys.deals.list(filters as Record<string, unknown>), 'view']
       : [...queryKeys.deals.lists(), 'view'],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       // Step 1: Fetch deals and stages first (always needed)
       const [dealsResult, stagesResult] = await Promise.all([
-        dealsService.getAll(),
-        boardStagesService.getAll(),
+        dealsService.getAll({ signal }),
+        boardStagesService.getAll({ signal }),
       ]);
 
       if (dealsResult.error) throw dealsResult.error;
@@ -99,8 +99,8 @@ export const useDealsView = (filters?: DealsFilters) => {
 
       // Step 3: Fetch only referenced contacts and companies in parallel
       const [contactsResult, companiesResult] = await Promise.all([
-        contactsService.getByIds(contactIds),
-        companiesService.getByIds(companyIds),
+        contactsService.getByIds(contactIds, { signal }),
+        companiesService.getByIds(companyIds, { signal }),
       ]);
 
       const contacts = contactsResult.data || [];
@@ -180,11 +180,11 @@ export const useDealsByBoard = (boardId: string) => {
   return useQuery<DealView[], Error, DealView[]>({
     // CRÍTICO: Usar a mesma query key que useDealsView para compartilhar cache
     queryKey: [...queryKeys.deals.lists(), 'view'],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       // Step 1: Fetch deals and stages first
       const [dealsResult, stagesResult] = await Promise.all([
-        dealsService.getAll(),
-        boardStagesService.getAll(),
+        dealsService.getAll({ signal }),
+        boardStagesService.getAll({ signal }),
       ]);
 
       if (dealsResult.error) throw dealsResult.error;
@@ -198,8 +198,8 @@ export const useDealsByBoard = (boardId: string) => {
 
       // Step 3: Fetch only referenced contacts and companies
       const [contactsResult, companiesResult] = await Promise.all([
-        contactsService.getByIds(contactIds),
-        companiesService.getByIds(companyIds),
+        contactsService.getByIds(contactIds, { signal }),
+        companiesService.getByIds(companyIds, { signal }),
       ]);
 
       const contacts = contactsResult.data || [];

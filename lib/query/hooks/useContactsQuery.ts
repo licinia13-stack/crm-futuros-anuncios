@@ -174,8 +174,8 @@ export const useContactsPaginated = (
   const { user, loading: authLoading } = useAuth();
   return useQuery({
     queryKey: queryKeys.contacts.paginated(pagination, filters),
-    queryFn: async () => {
-      const { data, error } = await contactsService.getAllPaginated(pagination, filters);
+    queryFn: async ({ signal }) => {
+      const { data, error } = await contactsService.getAllPaginated(pagination, filters, { signal });
       if (error) throw error;
       return data!;
     },

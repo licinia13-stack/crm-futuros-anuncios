@@ -888,14 +888,20 @@ export const boardsService = {
 // BOARD STAGES SERVICE (para lookup de stageLabel)
 // ============================================
 export const boardStagesService = {
-  /** Busca todos os stages */
-  async getAll(): Promise<{ data: DbBoardStage[] | null; error: Error | null }> {
+  /**
+   * Busca todos os stages.
+   *
+   * @param options - Opções adicionais, incluindo AbortSignal para cancelar a request.
+   */
+  async getAll(options?: { signal?: AbortSignal }): Promise<{ data: DbBoardStage[] | null; error: Error | null }> {
     try {
       if (!supabase) return { data: null, error: new Error('Supabase não configurado') };
 
-      const { data, error } = await supabase
+      let stagesQuery = supabase
         .from('board_stages')
-        .select('*')
+        .select('*');
+      if (options?.signal) stagesQuery = stagesQuery.abortSignal(options.signal);
+      const { data, error } = await stagesQuery
         .order('order', { ascending: true });
 
       return { data: data as DbBoardStage[] | null, error };

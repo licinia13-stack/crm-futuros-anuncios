@@ -250,10 +250,11 @@ const transformDealToDb = (deal: Partial<Deal>): Partial<DbDeal> => {
 export const dealsService = {
   /**
    * Busca todos os deals da organização com seus itens.
-   * 
+   *
+   * @param options - Opções adicionais, incluindo AbortSignal para cancelar a request.
    * @returns Promise com array de deals ou erro.
    */
-  async getAll(): Promise<{ data: Deal[] | null; error: Error | null }> {
+  async getAll(options?: { signal?: AbortSignal }): Promise<{ data: Deal[] | null; error: Error | null }> {
     try {
       if (!supabase) {
         return { data: null, error: new Error('Supabase não configurado') };
@@ -261,12 +262,14 @@ export const dealsService = {
       // Embedded select: traz deal_items junto com deals em UMA query
       // Elimina N+1: antes carregava TODOS items e filtrava no cliente
       // Agora o Postgres já retorna os items aninhados por deal
-      const { data, error } = await supabase
+      let dealsQuery = supabase
         .from('deals')
         .select(`
           *,
           deal_items (*)
-        `)
+        `);
+      if (options?.signal) dealsQuery = dealsQuery.abortSignal(options.signal);
+      const { data, error } = await dealsQuery
         .order('created_at', { ascending: false });
 
       if (error) return { data: null, error };

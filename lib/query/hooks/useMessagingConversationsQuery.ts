@@ -48,7 +48,7 @@ export function useMessagingConversations(filters?: ConversationFilters) {
 
   return useQuery({
     queryKey: queryKeys.messagingConversations.filtered(filters),
-    queryFn: async (): Promise<ConversationView[]> => {
+    queryFn: async ({ signal }): Promise<ConversationView[]> => {
       const supabase = getClient();
 
       let query = supabase
@@ -71,7 +71,8 @@ export function useMessagingConversations(filters?: ConversationFilters) {
             name,
             avatar
           )
-        `);
+        `)
+        .abortSignal(signal);
 
       // Apply filters
       if (filters?.status && filters.status !== 'all') {
