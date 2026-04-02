@@ -7,9 +7,9 @@ import { QueryProvider } from '@/lib/query'
 import { ToastProvider } from '@/context/ToastContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { AuthProvider } from '@/context/AuthContext'
-import { CRMProvider } from '@/context/CRMContext'
 import { AIProvider } from '@/context/AIContext'
 import Layout from '@/components/Layout'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 export default function ProtectedShell({
     children,
@@ -64,11 +64,11 @@ export default function ProtectedShell({
             <ToastProvider>
                 <ThemeProvider>
                     <AuthProvider>
-                        <CRMProvider>
-                            <AIProvider>
-                                    {shouldUseAppShell ? <Layout>{children}</Layout> : children}
-                            </AIProvider>
-                        </CRMProvider>
+                        <AIProvider>
+                            <TooltipProvider delayDuration={200}>
+                                {shouldUseAppShell ? <Layout>{children}</Layout> : children}
+                            </TooltipProvider>
+                        </AIProvider>
                     </AuthProvider>
                 </ThemeProvider>
             </ToastProvider>
