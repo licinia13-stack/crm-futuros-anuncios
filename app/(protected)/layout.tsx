@@ -1,3 +1,5 @@
+'use client'
+
 import ProtectedShell from './ProtectedShell'
 
 export default function ProtectedLayout({
