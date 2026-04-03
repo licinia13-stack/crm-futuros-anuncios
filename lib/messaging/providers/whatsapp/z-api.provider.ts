@@ -20,7 +20,6 @@ import type {
   SendMessageParams,
   SendMessageResult,
   WebhookHandlerResult,
-  WebhookEventData,
   MessageReceivedEvent,
   StatusUpdateEvent,
   ErrorEvent,
@@ -30,6 +29,9 @@ import type {
   DocumentContent,
   AudioContent,
   VideoContent,
+  StickerContent,
+  LocationContent,
+  ReactionContent,
   MessageStatus,
 } from '../../types';
 
@@ -320,6 +322,18 @@ export class ZApiWhatsAppProvider extends BaseChannelProvider {
           response = await this.sendDocumentMessage(phone, content as DocumentContent, replyToMessageId);
           break;
 
+        case 'sticker':
+          response = await this.sendStickerMessage(phone, content as StickerContent, replyToMessageId);
+          break;
+
+        case 'location':
+          response = await this.sendLocationMessage(phone, content as LocationContent, replyToMessageId);
+          break;
+
+        case 'reaction':
+          response = await this.sendReactionMessage(phone, content as ReactionContent);
+          break;
+
         default:
           return {
             success: false,
@@ -448,11 +462,94 @@ export class ZApiWhatsAppProvider extends BaseChannelProvider {
       body.fileName = content.fileName;
     }
 
+    if (content.caption) {
+      body.caption = content.caption;
+    }
+
     if (replyToMessageId) {
       body.messageId = replyToMessageId;
     }
 
-    return this.request<ZApiSendResponse>('POST', '/send-document/pdf', body);
+    // Z-API requires the file extension in the URL path
+    const ext = this.getExtensionFromMimeType(content.mimeType, content.fileName);
+    return this.request<ZApiSendResponse>('POST', `/send-document/${ext}`, body);
+  }
+
+  private async sendStickerMessage(
+    phone: string,
+    content: StickerContent,
+    replyToMessageId?: string
+  ): Promise<ZApiSendResponse> {
+    const body: Record<string, unknown> = {
+      phone,
+      sticker: content.mediaUrl,
+    };
+
+    if (replyToMessageId) {
+      body.messageId = replyToMessageId;
+    }
+
+    return this.request<ZApiSendResponse>('POST', '/send-sticker', body);
+  }
+
+  private async sendLocationMessage(
+    phone: string,
+    content: LocationContent,
+    replyToMessageId?: string
+  ): Promise<ZApiSendResponse> {
+    const body: Record<string, unknown> = {
+      phone,
+      latitude: String(content.latitude),
+      longitude: String(content.longitude),
+      title: content.name || 'Localização',
+      address: content.address || '',
+    };
+
+    if (replyToMessageId) {
+      body.messageId = replyToMessageId;
+    }
+
+    return this.request<ZApiSendResponse>('POST', '/send-location', body);
+  }
+
+  private async sendReactionMessage(
+    phone: string,
+    content: ReactionContent
+  ): Promise<ZApiSendResponse> {
+    return this.request<ZApiSendResponse>('POST', '/send-reaction', {
+      phone,
+      reaction: content.emoji,
+      messageId: content.messageId,
+    });
+  }
+
+  /**
+   * Derive the file extension Z-API needs in the URL from mimeType or fileName.
+   * Falls back to 'pdf' if undetermined.
+   */
+  private getExtensionFromMimeType(mimeType: string, fileName?: string): string {
+    // Try to get from fileName first (most reliable)
+    if (fileName) {
+      const parts = fileName.split('.');
+      if (parts.length > 1) {
+        return parts[parts.length - 1].toLowerCase();
+      }
+    }
+
+    // Fall back to mimeType mapping
+    const mimeToExt: Record<string, string> = {
+      'application/pdf': 'pdf',
+      'application/msword': 'doc',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'application/vnd.ms-excel': 'xls',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+      'application/vnd.ms-powerpoint': 'ppt',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+      'text/plain': 'txt',
+      'text/csv': 'csv',
+    };
+
+    return mimeToExt[mimeType] ?? 'pdf';
   }
 
   // ---------------------------------------------------------------------------
@@ -672,11 +769,20 @@ export class ZApiWhatsAppProvider extends BaseChannelProvider {
       headers['Client-Token'] = this.clientToken;
     }
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();

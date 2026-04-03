@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Send, Paperclip, Smile, Clock, FileText, X, Loader2, Image, File } from 'lucide-react';
+import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react';
 import { cn } from '@/lib/utils';
 import { useSendTextMessage, useSendMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
 import { useMediaUploadMutation } from '@/lib/query/hooks/useMediaUploadMutation';
@@ -50,11 +51,13 @@ function formatFileSize(bytes: number): string {
 export function MessageInput({ conversation }: MessageInputProps) {
   const [text, setText] = useState('');
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
 
-  const { mutate: sendTextMessage, isPending } = useSendTextMessage();
+  const { mutate: sendTextMessage } = useSendTextMessage();
   const sendMessage = useSendMessage();
   const uploadMedia = useMediaUploadMutation();
   const { mutate: sendTemplate, isPending: isSendingTemplate } = useSendTemplateMutation();
@@ -63,7 +66,9 @@ export function MessageInput({ conversation }: MessageInputProps) {
   );
 
   const isUploading = uploadMedia.isPending;
-  const isDisabled = conversation.isWindowExpired || isPending || isSendingTemplate || isUploading;
+  // Text sends use optimistic updates — no need to block the input while the API is in flight.
+  // Only block during: media upload (can't parallelize), template send, expired window.
+  const isDisabled = conversation.isWindowExpired || isSendingTemplate || isUploading;
 
   // Cleanup blob URL on unmount to prevent memory leaks (FIX-03)
   // Also used by clearMedia to avoid depending on the entire pendingMedia object.
@@ -76,6 +81,37 @@ export function MessageInput({ conversation }: MessageInputProps) {
       }
     };
   }, []);
+
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
+
+  const handleEmojiClick = useCallback((emojiData: EmojiClickData) => {
+    const emoji = emojiData.emoji;
+    const textarea = textareaRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart ?? text.length;
+      const end = textarea.selectionEnd ?? text.length;
+      const newText = text.slice(0, start) + emoji + text.slice(end);
+      setText(newText);
+      requestAnimationFrame(() => {
+        textarea.selectionStart = start + emoji.length;
+        textarea.selectionEnd = start + emoji.length;
+        textarea.focus();
+      });
+    } else {
+      setText(prev => prev + emoji);
+    }
+    setShowEmojiPicker(false);
+  }, [text]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -165,15 +201,14 @@ export function MessageInput({ conversation }: MessageInputProps) {
     const trimmedText = text.trim();
     if (!trimmedText || isDisabled) return;
 
-    sendTextMessage(
-      { conversationId: conversation.id, text: trimmedText },
-      {
-        onSuccess: () => {
-          setText('');
-          textareaRef.current?.focus();
-        },
-      }
-    );
+    // Clear immediately — optimistic message already in cache via onMutate
+    setText('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+    textareaRef.current?.focus();
+
+    sendTextMessage({ conversationId: conversation.id, text: trimmedText });
   }, [text, isDisabled, sendTextMessage, conversation.id, pendingMedia, handleSendMedia]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -272,7 +307,7 @@ export function MessageInput({ conversation }: MessageInputProps) {
         </div>
       )}
 
-      <div className="flex items-end gap-2 p-4">
+      <div className="flex items-end gap-2 p-3">
         <input
           ref={fileInputRef}
           type="file"
@@ -280,22 +315,28 @@ export function MessageInput({ conversation }: MessageInputProps) {
           onChange={handleFileSelect}
           className="hidden"
         />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading}
-          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors disabled:opacity-50"
-          title="Anexar arquivo"
-          aria-label="Anexar arquivo"
-        >
-          {isUploading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <Paperclip className="w-5 h-5" />
-          )}
-        </button>
 
-        <div className="flex-1 relative">
+        {/* Input pill: attach + textarea + emoji + template */}
+        <div className={cn(
+          'flex-1 flex items-end rounded-2xl transition-colors',
+          'bg-slate-100 dark:bg-white/5',
+          'ring-1 ring-transparent focus-within:ring-primary-500/50 focus-within:bg-white dark:focus-within:bg-white/[0.07]'
+        )}>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="flex-shrink-0 p-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors disabled:opacity-50"
+            title="Anexar arquivo"
+            aria-label="Anexar arquivo"
+          >
+            {isUploading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Paperclip className="w-5 h-5" />
+            )}
+          </button>
+
           <textarea
             ref={textareaRef}
             value={text}
@@ -305,43 +346,62 @@ export function MessageInput({ conversation }: MessageInputProps) {
             disabled={isDisabled}
             rows={1}
             className={cn(
-              'w-full px-4 py-2.5 text-sm resize-none',
-              'bg-slate-100 dark:bg-white/5 border border-transparent rounded-2xl',
-              'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
+              'flex-1 py-2.5 text-sm resize-none bg-transparent',
+              'focus:outline-none',
               'text-slate-900 dark:text-white placeholder-slate-400',
               'disabled:opacity-50 disabled:cursor-not-allowed',
               'max-h-[120px]'
             )}
             style={{ height: 'auto', minHeight: '40px' }}
           />
+
+          <div className="relative flex items-end flex-shrink-0 pb-0.5 pr-1" ref={emojiPickerRef}>
+            {showEmojiPicker && (
+              <div className="absolute bottom-full right-0 mb-2 z-50">
+                <EmojiPicker
+                  onEmojiClick={handleEmojiClick}
+                  theme={Theme.AUTO}
+                  width={320}
+                  height={400}
+                  searchPlaceholder="Buscar emoji..."
+                  lazyLoadEmojis
+                />
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowEmojiPicker(prev => !prev)}
+              className={cn(
+                'p-2 rounded-xl transition-colors',
+                showEmojiPicker
+                  ? 'text-primary-500'
+                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+              )}
+              title="Emojis"
+              aria-label="Emojis"
+            >
+              <Smile className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowTemplates(true)}
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-xl transition-colors"
+              title="Enviar template"
+              aria-label="Enviar template"
+            >
+              <FileText className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        <button
-          type="button"
-          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors"
-          title="Emojis"
-          aria-label="Emojis"
-        >
-          <Smile className="w-5 h-5" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowTemplates(true)}
-          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors"
-          title="Enviar template"
-          aria-label="Enviar template"
-        >
-          <FileText className="w-5 h-5" />
-        </button>
-
+        {/* Send button */}
         <button
           type="submit"
           disabled={(!text.trim() && !pendingMedia) || isDisabled}
           className={cn(
-            'p-2.5 rounded-full transition-colors',
+            'flex-shrink-0 p-2.5 rounded-full transition-colors',
             (text.trim() || pendingMedia) && !isDisabled
-              ? 'bg-primary-500 hover:bg-primary-600 text-white'
+              ? 'bg-primary-500 hover:bg-primary-600 text-white shadow-sm'
               : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
           )}
         >
