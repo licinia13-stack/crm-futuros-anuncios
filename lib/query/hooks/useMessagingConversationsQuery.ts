@@ -255,7 +255,7 @@ export function useMessagingConversation(conversationId: string | undefined) {
         contactAiPaused: contact?.ai_paused ?? false,
         assignedUserName: assignedUser?.name,
         assignedUserAvatar: assignedUser?.avatar,
-        isWindowExpired: isWindowExpired(base),
+        isWindowExpired: isWindowExpired(base, channel?.provider),
         windowMinutesRemaining: getWindowMinutesRemaining(base),
       };
     },
