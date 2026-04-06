@@ -166,6 +166,8 @@ export interface ProcessMessageParams {
   organizationId: string;
   incomingMessage: string;
   messageId?: string;
+  /** Simulation mode: skips actual channel delivery, marks message as sent directly. */
+  simulationMode?: boolean;
 }
 
 // =============================================================================
@@ -405,6 +407,48 @@ export async function processIncomingMessage(
     };
   }
 
+  // 7.5. Verificar notify_team — handoff automático por configuração de estágio
+  if (config.notify_team) {
+    const handoffDecision = await handleHandoff(
+      supabase,
+      conversationId,
+      organizationId,
+      context,
+      'Estágio configurado para notificar equipe (notify_team)'
+    );
+
+    // Fetch Telegram credentials and fire notification (fire-and-forget on error)
+    const { data: orgTelegram } = await supabase
+      .from('organization_settings')
+      .select('telegram_bot_token, telegram_chat_id')
+      .eq('organization_id', organizationId)
+      .maybeSingle();
+
+    if (orgTelegram?.telegram_bot_token && orgTelegram?.telegram_chat_id) {
+      const { sendTelegramMessage, formatHandoffMessage } = await import('@/lib/notifications/telegram');
+      const message = formatHandoffMessage({
+        contactName: context.contact?.name ?? 'Lead',
+        dealTitle: context.deal?.title ?? 'Deal',
+        stageName: context.stage.name,
+        lastMessage: incomingMessage,
+        appUrl: process.env.NEXT_PUBLIC_APP_URL,
+        dealId: context.deal?.id,
+      });
+      await sendTelegramMessage(
+        orgTelegram.telegram_bot_token,
+        orgTelegram.telegram_chat_id,
+        message
+      ).catch((err: unknown) => {
+        console.error('[AIAgent] Failed to send Telegram handoff notification:', err);
+      });
+    }
+
+    return {
+      success: true,
+      decision: handoffDecision,
+    };
+  }
+
   // 8. Verificar horário comercial
   if (config.settings.business_hours_only && !isBusinessHours(config.settings.business_hours)) {
     return {
@@ -435,6 +479,7 @@ export async function processIncomingMessage(
       supabase,
       conversationId,
       response: decision.response,
+      simulationMode: params.simulationMode,
     });
 
     if (!sendResult.success) {
@@ -656,8 +701,9 @@ async function sendAIResponse(params: {
   supabase: SupabaseClient;
   conversationId: string;
   response: string;
+  simulationMode?: boolean;
 }): Promise<SendResult> {
-  const { supabase, conversationId, response } = params;
+  const { supabase, conversationId, response, simulationMode } = params;
 
   // Buscar dados da conversa e canal
   const { data: conversation } = await supabase
@@ -700,6 +746,15 @@ async function sendAIResponse(params: {
       success: false,
       error: { code: 'INSERT_FAILED', message: insertError.message },
     };
+  }
+
+  // Simulation mode: skip channel delivery, mark message as sent directly
+  if (simulationMode) {
+    await supabase
+      .from('messaging_messages')
+      .update({ status: 'sent', sent_at: new Date().toISOString() })
+      .eq('id', message.id);
+    return { success: true, messageId: message.id };
   }
 
   // Enviar via ChannelRouter
