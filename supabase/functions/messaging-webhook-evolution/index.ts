@@ -499,23 +499,27 @@ async function handleMessagesUpsert(
 
   // Insert message (inbound or outbound from WhatsApp app)
   // Preserve real content type instead of always saving as 'text'
-  const { error: msgErr } = await supabase.from("messaging_messages").insert({
-    conversation_id: conversationId,
-    external_id: externalMessageId,
-    direction,
-    content_type: contentType,
-    content,
-    status: direction === "outbound" ? "sent" : "delivered",
-    ...(direction === "outbound"
-      ? { sent_at: timestamp.toISOString() }
-      : { delivered_at: timestamp.toISOString() }),
-    sender_name: isFromMe ? null : pushName,
-    metadata: {
-      evolution_message_id: externalMessageId,
-      message_type: data.messageType,
-      timestamp: data.messageTimestamp,
-    },
-  });
+  const { data: insertedMsg, error: msgErr } = await supabase
+    .from("messaging_messages")
+    .insert({
+      conversation_id: conversationId,
+      external_id: externalMessageId,
+      direction,
+      content_type: contentType,
+      content,
+      status: direction === "outbound" ? "sent" : "delivered",
+      ...(direction === "outbound"
+        ? { sent_at: timestamp.toISOString() }
+        : { delivered_at: timestamp.toISOString() }),
+      sender_name: isFromMe ? null : pushName,
+      metadata: {
+        evolution_message_id: externalMessageId,
+        message_type: data.messageType,
+        timestamp: data.messageTimestamp,
+      },
+    })
+    .select("id")
+    .maybeSingle();
 
   if (msgErr) {
     if (!msgErr.message.toLowerCase().includes("duplicate")) {
@@ -541,21 +545,17 @@ async function handleMessagesUpsert(
   }
 
   // Only trigger AI for inbound text messages
-  if (!isFromMe && contentType === "text") {
+  // insertedMsg.id is the internal UUID from the insert — never fall back to
+  // externalMessageId (an Evolution message key, not a UUID) or the AI endpoint
+  // will reject the request silently.
+  if (!isFromMe && contentType === "text" && insertedMsg?.id) {
     const textContent = content.text as string | undefined;
     if (textContent) {
-      const { data: insertedMsg } = await supabase
-        .from("messaging_messages")
-        .select("id")
-        .eq("external_id", externalMessageId)
-        .eq("conversation_id", conversationId)
-        .maybeSingle();
-
       triggerAIProcessing({
         conversationId,
         organizationId: channel.organization_id,
         messageText: textContent,
-        messageId: insertedMsg?.id ?? externalMessageId,
+        messageId: insertedMsg.id,
       }).catch((err) => {
         console.error("[Evolution] AI processing trigger error:", err);
       });
@@ -606,10 +606,12 @@ async function handleConnectionUpdate(
   channel: { id: string },
   payload: EvolutionConnectionUpdatePayload
 ) {
+  // "connecting" is intentionally omitted — writing it would break the channel
+  // lookup (which only accepts "connected"/"active"), silently dropping all
+  // subsequent webhooks until the status is manually fixed.
   const stateMap: Record<string, string> = {
     open: "connected",
     close: "disconnected",
-    connecting: "connecting",
   };
 
   const state = payload.data?.state;
