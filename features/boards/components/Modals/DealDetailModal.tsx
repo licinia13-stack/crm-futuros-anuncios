@@ -676,33 +676,11 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                       </p>
                       <p className="text-slate-500 text-xs">{deal.contactEmail}</p>
                     </div>
-                    {/* Send Message Button */}
-                    {contact?.phone && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          // Navigate to messaging with contact info for new conversation
-                          const params = new URLSearchParams({
-                            newConversation: 'true',
-                            contactId: contact.id,
-                            contactName: contact.name || '',
-                            contactPhone: contact.phone || '',
-                          });
-                          router.push(`/messaging?${params.toString()}`);
-                          onClose();
-                        }}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 hover:bg-green-100 dark:hover:bg-green-500/20 rounded-lg transition-colors"
-                        title="Enviar mensagem via WhatsApp"
-                      >
-                        <MessageSquare size={14} />
-                        <span className="hidden sm:inline">Mensagem</span>
-                      </button>
-                    )}
                   </div>
                 </div>
 
                 {/* Company rich info */}
-                {(company?.address || company?.phone || company?.email || company?.facebook || company?.instagram || company?.website) && (
+                {(company?.address || company?.phone || company?.email || company?.facebook || company?.instagram || company?.website || company?.whatsapp) && (
                   <div className="pt-4 border-t border-slate-100 dark:border-white/5">
                     <h3 className="text-xs font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
                       <Building2 size={14} /> Empresa
@@ -735,6 +713,14 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                           <Globe size={13} className="text-slate-400 shrink-0" />
                           <a href={company.website.startsWith('http') ? company.website : 'https://' + company.website} target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline truncate">
                             {company.website}
+                          </a>
+                        </div>
+                      )}
+                      {company.whatsapp && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <ExternalLink size={13} className="text-green-500 shrink-0" />
+                          <a href={company.whatsapp.startsWith('http') ? company.whatsapp : 'https://wa.me/' + company.whatsapp.replace(/\D/g, '')} target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">
+                            WhatsApp
                           </a>
                         </div>
                       )}
