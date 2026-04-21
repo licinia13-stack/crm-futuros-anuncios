@@ -585,7 +585,7 @@ export const useCreateDealWithContact = () => {
       relatedData,
     }: {
       deal: Omit<Deal, 'id' | 'createdAt'>;
-      relatedData?: { contact?: Partial<Contact>; companyName?: string };
+      relatedData?: { contact?: Partial<Contact>; companyName?: string; extraCompanyFields?: Record<string, string | undefined> };
     }) => {
       let finalCompanyId = deal.companyId;
       let finalContactId = deal.contactId;
@@ -594,7 +594,12 @@ export const useCreateDealWithContact = () => {
       if (relatedData?.companyName) {
         const { data: company, error: companyError } = await companiesService.create({ name: relatedData.companyName });
         if (companyError) throw companyError;
-        if (company) finalCompanyId = company.id;
+        if (company) {
+          finalCompanyId = company.id;
+          if (relatedData.extraCompanyFields && Object.keys(relatedData.extraCompanyFields).length > 0) {
+            await companiesService.update(company.id, relatedData.extraCompanyFields as any);
+          }
+        }
       }
 
       // Create contact if provided

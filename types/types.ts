@@ -1,7 +1,7 @@
 /**
  * @fileoverview Definições de Tipos do CRM
  * 
- * Arquivo central de tipos TypeScript para o sistema NossoCRM.
+ * Arquivo central de tipos TypeScript para o sistema CRM Futuros Anúncios.
  * Contém interfaces para todas as entidades do domínio.
  * 
  * @module types
@@ -136,10 +136,25 @@ export type Company = Organization;
  */
 export interface CRMCompany {
   id: ClientCompanyId;
-  organizationId?: OrganizationId; // Tenant FK (for RLS) - optional during migration
+  organizationId?: OrganizationId;
   name: string;
   industry?: string;
   website?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  facebook?: string;
+  instagram?: string;
+  linkedin?: string;
+  nif?: string;
+  metaAds?: string;
+  address2?: string;
+  address3?: string;
+  email2?: string;
+  tiktok?: string;
+  googleMaps?: string;
+  googleMyBusiness?: string;
+  youtube?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -163,7 +178,11 @@ export interface Contact {
   status: 'ACTIVE' | 'INACTIVE' | 'CHURNED';
   stage: string; // ID do LifecycleStage (antes era ContactStage enum)
   source?: 'WEBSITE' | 'LINKEDIN' | 'REFERRAL' | 'MANUAL'; // Origem do contato
-  notes?: string; // Anotações gerais
+  notes?: string;
+  mobile?: string;
+  address?: string;
+  facebook?: string;
+  instagram?: string;
   lastPurchaseDate?: string;
   totalValue?: number; // LTV
   createdAt: string;

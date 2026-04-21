@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useId, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   useContacts,
+  useCompanies,
   useActivities,
   useBoards,
   useLifecycleStages,
@@ -52,12 +53,16 @@ import {
   Plus,
   MessageSquare,
   FileText,
+  MapPin,
+  Globe,
+  ExternalLink,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { StageProgressBar } from '../StageProgressBar';
 import { ActivityRow } from '@/features/activities/components/ActivityRow';
 import { formatPriorityPtBr } from '@/lib/utils/priority';
 import { BriefingDrawer } from '@/features/deals/components/BriefingDrawer';
+import { useDealNotes } from '@/features/inbox/hooks/useDealNotes';
 import { AIExtractedFields } from '@/features/deals/components/AIExtractedFields';
 
 interface DealDetailModalProps {
@@ -67,7 +72,7 @@ interface DealDetailModalProps {
 }
 
 // Performance: reuse date formatter instance.
-const PT_BR_DATE_FORMATTER = new Intl.DateTimeFormat('pt-BR');
+const PT_BR_DATE_FORMATTER = new Intl.DateTimeFormat('pt-PT');
 
 /**
  * Componente React `DealDetailModal`.
@@ -95,6 +100,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const removeItemFromDeal = (dealId: string, itemId: string) => removeDealItemMutation.mutateAsync({ dealId, itemId });
 
   const { data: contacts = [] } = useContacts();
+  const { data: companies = [] } = useCompanies();
   const { data: activities = [] } = useActivities();
   const { data: boards = [] } = useBoards();
   const { activeBoardId } = useUIState();
@@ -108,6 +114,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const updateActivity = (id: string, updates: Partial<import('@/types').Activity>) => updateActivityMutation.mutateAsync({ id, updates });
   const deleteActivity = (id: string) => deleteActivityMutation.mutateAsync(id);
   const { data: products = [] } = useActiveProducts();
+  const { notes: dealNotes = [], createNote: createDealNote, deleteNote: deleteDealNote } = useDealNotes(dealId ?? undefined);
   const customFieldDefinitions: import('@/types').CustomFieldDefinition[] = [];
   const { profile } = useAuth();
   const { addToast } = useToast();
@@ -125,6 +132,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   // Performance: avoid repeated `find(...)` on large arrays.
   const dealsById = useMemo(() => new Map(allDeals.map((d) => [d.id, d])), [allDeals]);
   const contactsById = useMemo(() => new Map(contacts.map((c) => [c.id, c])), [contacts]);
+  const companiesById = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
   const boardsById = useMemo(() => new Map(boards.map((b) => [b.id, b])), [boards]);
   const lifecycleStageById = useMemo(() => new Map(lifecycleStages.map((s) => [s.id, s])), [lifecycleStages]);
   const productsById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
@@ -132,6 +140,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
 
   const deal = dealId ? dealsById.get(dealId) : undefined;
   const contact = deal ? (contactsById.get(deal.contactId) ?? null) : null;
+  const company = deal?.clientCompanyId ? (companiesById.get(deal.clientCompanyId) ?? null) : null;
 
   // Determine the correct board for this deal
   const dealBoard = deal ? (boardsById.get(deal.boardId) ?? activeBoard) : activeBoard;
@@ -314,22 +323,9 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
     }
   };
 
-  const handleAddNote = () => {
-    if (!newNote.trim()) return;
-
-    const noteActivity: Activity = {
-      id: crypto.randomUUID(),
-      dealId: deal.id,
-      dealTitle: deal.title,
-      type: 'NOTE',
-      title: 'Nota Adicionada',
-      description: newNote,
-      date: new Date().toISOString(),
-      user: { name: 'Eu', avatar: 'https://i.pravatar.cc/150?u=me' },
-      completed: true,
-    };
-
-    addActivity(noteActivity);
+  const handleAddNote = async () => {
+    if (!newNote.trim() || !dealId) return;
+    await createDealNote.mutateAsync(newNote.trim());
     setNewNote('');
   };
 
@@ -486,7 +482,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                     className="text-lg text-primary-600 dark:text-primary-400 font-mono font-bold cursor-pointer hover:underline decoration-dashed underline-offset-4"
                     title="Clique para editar valor"
                   >
-                    ${deal.value.toLocaleString()}
+                    €{deal.value.toLocaleString('pt-PT')}
                   </p>
                 )}
               </div>
@@ -705,6 +701,75 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                   </div>
                 </div>
 
+                {/* Company rich info */}
+                {(company?.address || company?.phone || company?.email || company?.facebook || company?.instagram || company?.website) && (
+                  <div className="pt-4 border-t border-slate-100 dark:border-white/5">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
+                      <Building2 size={14} /> Empresa
+                    </h3>
+                    <div className="space-y-2">
+                      {company.address && (
+                        <div className="flex items-start gap-2 text-sm">
+                          <MapPin size={13} className="text-slate-400 mt-0.5 shrink-0" />
+                          <span className="text-slate-700 dark:text-slate-300">{company.address}</span>
+                        </div>
+                      )}
+                      {(company.phone || contact?.mobile) && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone size={13} className="text-slate-400 shrink-0" />
+                          <a href={'tel:' + (company.phone || contact?.mobile)} className="text-primary-600 dark:text-primary-400 hover:underline">
+                            {company.phone || contact?.mobile}
+                          </a>
+                        </div>
+                      )}
+                      {company.email && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail size={13} className="text-slate-400 shrink-0" />
+                          <a href={'mailto:' + company.email} className="text-primary-600 dark:text-primary-400 hover:underline truncate">
+                            {company.email}
+                          </a>
+                        </div>
+                      )}
+                      {company.website && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Globe size={13} className="text-slate-400 shrink-0" />
+                          <a href={company.website.startsWith('http') ? company.website : 'https://' + company.website} target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline truncate">
+                            {company.website}
+                          </a>
+                        </div>
+                      )}
+                      {company.facebook && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <ExternalLink size={13} className="text-blue-500 shrink-0" />
+                          <a href={company.facebook} target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">
+                            Facebook
+                          </a>
+                        </div>
+                      )}
+                      {company.instagram && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <ExternalLink size={13} className="text-pink-500 shrink-0" />
+                          <a href={company.instagram} target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">
+                            Instagram
+                          </a>
+                        </div>
+                      )}
+                      {company.nif && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-slate-400 text-xs font-bold shrink-0">NIF</span>
+                          <span className="text-slate-700 dark:text-slate-300">{company.nif}</span>
+                        </div>
+                      )}
+                      {company.metaAds && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-slate-400 text-xs font-bold shrink-0">Meta Ads</span>
+                          <span className="text-slate-700 dark:text-slate-300">{company.metaAds}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="pt-4 border-t border-slate-100 dark:border-white/5">
                   <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Detalhes</h3>
                   <div className="space-y-2">
@@ -903,22 +968,46 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                     </div>
 
                     <div className="space-y-3 pl-4 border-l border-slate-200 dark:border-slate-800">
-                      {dealActivities.length === 0 && (
+                      {dealActivities.length === 0 && dealNotes.length === 0 && (
                         <p className="text-sm text-slate-500 italic pl-4">
                           Nenhuma atividade registrada.
                         </p>
                       )}
+                      {/* Deal Notes */}
+                      {dealNotes.map(note => (
+                        <div key={note.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 shadow-sm">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <FileText size={14} className="text-primary-500 shrink-0 mt-0.5" />
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(note.created_at))}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => deleteDealNote.mutate(note.id)}
+                              className="text-slate-300 hover:text-red-400 transition-colors shrink-0"
+                              title="Apagar nota"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                          <div
+                            className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words prose prose-sm dark:prose-invert max-w-none [&_a]:text-primary-500 [&_a]:underline [&_a]:break-all"
+                            dangerouslySetInnerHTML={{ __html: note.content.replace(/\n/g, '<br/>') }}
+                          />
+                        </div>
+                      ))}
+                      {/* Activities */}
                       {dealActivities.map(activity => (
                         <ActivityRow
                           key={activity.id}
                           activity={activity}
                           deal={deal}
                           onToggleComplete={id => {
-                            // Performance: O(1) lookup instead of scanning all activities.
                             const act = activitiesById.get(id);
                             if (act) updateActivity(id, { completed: !act.completed });
                           }}
-                          onEdit={() => { }} // Edit not implemented in modal yet
+                          onEdit={() => { }}
                           onDelete={id => deleteActivity(id)}
                         />
                       ))}
@@ -941,7 +1030,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                           <option value="">Selecione um item...</option>
                           {products.map(p => (
                             <option key={p.id} value={p.id}>
-                              {p.name} - ${p.price}
+                              {p.name} - €{p.price}
                             </option>
                           ))}
                         </select>
@@ -1047,10 +1136,10 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                                   {item.quantity}
                                 </td>
                                 <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-300">
-                                  ${item.price.toLocaleString()}
+                                  €{item.price.toLocaleString('pt-PT')}
                                 </td>
                                 <td className="px-4 py-3 text-right font-bold text-slate-900 dark:text-white">
-                                  ${(item.price * item.quantity).toLocaleString()}
+                                  €{(item.price * item.quantity).toLocaleString('pt-PT')}
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   <button
@@ -1073,7 +1162,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                               Total do Pedido
                             </td>
                             <td className="px-4 py-3 text-right font-bold text-primary-600 dark:text-primary-400 text-lg">
-                              ${deal.value.toLocaleString()}
+                              €{deal.value.toLocaleString('pt-PT')}
                             </td>
                             <td></td>
                           </tr>

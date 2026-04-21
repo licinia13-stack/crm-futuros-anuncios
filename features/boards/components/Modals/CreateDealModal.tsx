@@ -3,7 +3,7 @@ import { useCreateDealWithContact } from '@/lib/query/hooks/useDealsQuery';
 import { useBoards } from '@/lib/query/hooks/useBoardsQuery';
 import { useAuth } from '@/context/AuthContext';
 import { Deal, Board, Contact, Company } from '@/types';
-import { X, Building2, User, Mail, Phone, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Building2, User, Mail, Phone, AlertCircle, Loader2, MapPin, Link, ChevronDown, ChevronUp } from 'lucide-react';
 import { DebugFillButton } from '@/components/debug/DebugFillButton';
 import { fakeDeal, fakeContact, fakeCompany } from '@/lib/debug';
 import { ContactSearchCombobox } from '@/components/ui/ContactSearchCombobox';
@@ -54,6 +54,16 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
         value: ''
     });
 
+    // Estado dos dados da empresa
+    const [showCompanyFields, setShowCompanyFields] = useState(true);
+    const [companyData, setCompanyData] = useState({
+        address: '', address2: '', address3: '',
+        phone2: '', email2: '',
+        website: '', facebook: '', instagram: '',
+        linkedin: '', tiktok: '', googleMaps: '',
+        googleMyBusiness: '', youtube: '', nif: ''
+    });
+
     // Estado de UI
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -64,6 +74,8 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
         setIsCreatingNew(false);
         setNewContactData({ name: '', email: '', phone: '', companyName: '' });
         setDealData({ title: '', value: '' });
+        setCompanyData({ address: '', address2: '', address3: '', phone2: '', email2: '', website: '', facebook: '', instagram: '', linkedin: '', tiktok: '', googleMaps: '', googleMyBusiness: '', youtube: '', nif: '' });
+        setShowCompanyFields(true);
         setError(null);
         setIsSubmitting(false);
     };
@@ -160,6 +172,22 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
 
             const { id: _id, createdAt: _createdAt, ...dealWithoutId } = deal;
 
+            const extraCompanyFields = showCompanyFields ? {
+                address:            companyData.address || undefined,
+                address2:           companyData.address2 || undefined,
+                address3:           companyData.address3 || undefined,
+                email2:             companyData.email2 || undefined,
+                website:            companyData.website || undefined,
+                nif:                companyData.nif || undefined,
+                facebook:           companyData.facebook || undefined,
+                instagram:          companyData.instagram || undefined,
+                linkedin:           companyData.linkedin || undefined,
+                tiktok:             companyData.tiktok || undefined,
+                google_maps:        companyData.googleMaps || undefined,
+                google_my_business: companyData.googleMyBusiness || undefined,
+                youtube:            companyData.youtube || undefined,
+            } : {};
+
             // Se selecionou contato existente
             if (selectedContact) {
                 await createDealWithContact.mutateAsync({
@@ -170,7 +198,8 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
                             name: selectedContact.name,
                             email: selectedContact.email,
                             phone: selectedContact.phone
-                        }
+                        },
+                        extraCompanyFields,
                     }
                 });
             } else {
@@ -183,7 +212,8 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
                             name: newContactData.name,
                             email: newContactData.email,
                             phone: newContactData.phone
-                        }
+                        },
+                        extraCompanyFields,
                     }
                 });
             }
@@ -362,6 +392,88 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
                         )}
                     </div>
 
+                    {/* Dados da Empresa */}
+                    <div className="pt-3 border-t border-slate-100 dark:border-white/5">
+                        <button
+                            type="button"
+                            onClick={() => setShowCompanyFields(v => !v)}
+                            className="flex items-center justify-between w-full text-xs font-bold text-slate-400 uppercase mb-3 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                        >
+                            <span className="flex items-center gap-2"><Building2 size={13} /> Dados da Empresa</span>
+                            {showCompanyFields ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+
+                        {showCompanyFields && (
+                            <div className="space-y-2 mb-4">
+                                {/* Moradas */}
+                                {(['address', 'address2', 'address3'] as const).map((field, i) => (
+                                    <div key={field} className="relative">
+                                        <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            placeholder={i === 0 ? 'Morada 1 (principal)' : `Morada ${i + 1}`}
+                                            value={companyData[field]}
+                                            onChange={e => setCompanyData(prev => ({ ...prev, [field]: e.target.value }))}
+                                            className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                                        />
+                                    </div>
+                                ))}
+
+                                {/* Email 2 e Telefone 2 */}
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="relative">
+                                        <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input type="email" placeholder="Email 2" value={companyData.email2}
+                                            onChange={e => setCompanyData(prev => ({ ...prev, email2: e.target.value }))}
+                                            className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" />
+                                    </div>
+                                    <div className="relative">
+                                        <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input type="tel" placeholder="Telefone 2" value={companyData.phone2}
+                                            onChange={e => setCompanyData(prev => ({ ...prev, phone2: e.target.value }))}
+                                            className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" />
+                                    </div>
+                                </div>
+
+                                {/* Website e NIF */}
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="relative">
+                                        <Link size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input type="url" placeholder="Website" value={companyData.website}
+                                            onChange={e => setCompanyData(prev => ({ ...prev, website: e.target.value }))}
+                                            className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" />
+                                    </div>
+                                    <input type="text" placeholder="NIF" value={companyData.nif}
+                                        onChange={e => setCompanyData(prev => ({ ...prev, nif: e.target.value }))}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" />
+                                </div>
+
+                                {/* Redes Sociais */}
+                                <p className="text-xs text-slate-400 uppercase font-bold pt-1">Redes Sociais</p>
+                                {([
+                                    { key: 'facebook',         label: 'Facebook',           color: 'text-blue-500' },
+                                    { key: 'instagram',        label: 'Instagram',          color: 'text-pink-500' },
+                                    { key: 'linkedin',         label: 'LinkedIn',           color: 'text-blue-700' },
+                                    { key: 'tiktok',           label: 'TikTok',             color: 'text-slate-900 dark:text-white' },
+                                    { key: 'youtube',          label: 'YouTube',            color: 'text-red-500' },
+                                    { key: 'googleMaps',       label: 'Google Maps',        color: 'text-green-600' },
+                                    { key: 'googleMyBusiness', label: 'Google My Business', color: 'text-yellow-500' },
+                                ] as { key: keyof typeof companyData; label: string; color: string }[]).map(({ key, label, color }) => (
+                                    <div key={key} className="relative">
+                                        <Link size={14} className={'absolute left-3 top-1/2 -translate-y-1/2 ' + color} />
+                                        <input
+                                            type="url"
+                                            placeholder={label + ' (URL)'}
+                                            value={companyData[key]}
+                                            onChange={e => setCompanyData(prev => ({ ...prev, [key]: e.target.value }))}
+                                            className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     {/* Dados do Negócio */}
                     <div className="pt-3 border-t border-slate-100 dark:border-white/5">
                         <h3 className="text-xs font-bold text-slate-400 uppercase mb-3">Dados do Negócio</h3>
@@ -380,7 +492,7 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
                             </div>
                             
                             <div>
-                                <label className="block text-xs font-medium text-slate-500 mb-1">Valor Estimado (R$)</label>
+                                <label className="block text-xs font-medium text-slate-500 mb-1">Valor Estimado (€)</label>
                                 <input
                                     type="number"
                                     className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"

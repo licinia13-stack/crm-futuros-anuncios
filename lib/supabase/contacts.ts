@@ -81,6 +81,10 @@ export interface DbContact {
   owner_id: string | null;
   /** Quando true, o agente de IA não responde a este contato. */
   ai_paused: boolean;
+  mobile?: string | null;
+  address?: string | null;
+  facebook?: string | null;
+  instagram?: string | null;
 }
 
 /**
@@ -105,6 +109,21 @@ export interface DbCRMCompany {
   updated_at: string;
   /** ID do dono/responsável. */
   owner_id: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  facebook?: string | null;
+  instagram?: string | null;
+  linkedin?: string | null;
+  nif?: string | null;
+  meta_ads?: string | null;
+  address2?: string | null;
+  address3?: string | null;
+  email2?: string | null;
+  tiktok?: string | null;
+  google_maps?: string | null;
+  google_my_business?: string | null;
+  youtube?: string | null;
 }
 
 /**
@@ -134,6 +153,10 @@ const transformContact = (db: DbContact): Contact => ({
   createdAt: db.created_at,
   updatedAt: db.updated_at,
   aiPaused: db.ai_paused ?? false,
+  mobile: db.mobile || undefined,
+  address: db.address || undefined,
+  facebook: db.facebook || undefined,
+  instagram: db.instagram || undefined,
 });
 
 /**
@@ -148,6 +171,21 @@ const transformCRMCompany = (db: DbCRMCompany): CRMCompany => ({
   name: db.name,
   industry: db.industry || undefined,
   website: db.website || undefined,
+  address: db.address || undefined,
+  phone: db.phone || undefined,
+  email: db.email || undefined,
+  facebook: db.facebook || undefined,
+  instagram: db.instagram || undefined,
+  linkedin: db.linkedin || undefined,
+  nif: db.nif || undefined,
+  metaAds: db.meta_ads || undefined,
+  address2: db.address2 || undefined,
+  address3: db.address3 || undefined,
+  email2: db.email2 || undefined,
+  tiktok: db.tiktok || undefined,
+  googleMaps: db.google_maps || undefined,
+  googleMyBusiness: db.google_my_business || undefined,
+  youtube: db.youtube || undefined,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 });
@@ -693,6 +731,20 @@ export const companiesService = {
       if (updates.name !== undefined) dbUpdates.name = updates.name;
       if (updates.industry !== undefined) dbUpdates.industry = updates.industry || null;
       if (updates.website !== undefined) dbUpdates.website = updates.website || null;
+      if (updates.address !== undefined) dbUpdates.address = updates.address || null;
+      if (updates.address2 !== undefined) dbUpdates.address2 = updates.address2 || null;
+      if (updates.address3 !== undefined) dbUpdates.address3 = updates.address3 || null;
+      if (updates.email !== undefined) dbUpdates.email = updates.email || null;
+      if (updates.email2 !== undefined) dbUpdates.email2 = updates.email2 || null;
+      if (updates.phone !== undefined) dbUpdates.phone = updates.phone || null;
+      if (updates.nif !== undefined) dbUpdates.nif = updates.nif || null;
+      if (updates.facebook !== undefined) dbUpdates.facebook = updates.facebook || null;
+      if (updates.instagram !== undefined) dbUpdates.instagram = updates.instagram || null;
+      if (updates.linkedin !== undefined) dbUpdates.linkedin = updates.linkedin || null;
+      if (updates.tiktok !== undefined) dbUpdates.tiktok = updates.tiktok || null;
+      if (updates.googleMaps !== undefined) dbUpdates.google_maps = updates.googleMaps || null;
+      if (updates.googleMyBusiness !== undefined) dbUpdates.google_my_business = updates.googleMyBusiness || null;
+      if (updates.youtube !== undefined) dbUpdates.youtube = updates.youtube || null;
       dbUpdates.updated_at = new Date().toISOString();
 
       const { error } = await supabase
