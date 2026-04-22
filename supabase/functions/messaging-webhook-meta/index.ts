@@ -1329,12 +1329,12 @@ async function handleInstagramInboundMessage(
     conversationId = existingConv.id;
     contactId = existingConv.contact_id;
   } else {
-    // Instagram doesn't expose phone/email — lookup by IGSID in metadata (order+limit to handle duplicates)
+    // Lookup existing contact by IGSID stored in the instagram field
     const { data: existingContact } = await supabase
       .from("contacts")
       .select("id")
       .eq("organization_id", channel.organization_id)
-      .contains("metadata", { instagram_id: senderId })
+      .eq("instagram", senderId)
       .is("deleted_at", null)
       .order("created_at")
       .limit(1)
@@ -1343,8 +1343,26 @@ async function handleInstagramInboundMessage(
     if (existingContact) {
       contactId = existingContact.id;
     } else {
-      // Auto-create contact with IGSID
-      const contactName = `Instagram ${senderId.slice(-6)}`;
+      // Try to fetch the real Instagram username from the Graph API
+      const accessToken = (channel as unknown as { credentials?: { accessToken?: string } }).credentials?.accessToken;
+      let contactName = `Instagram ${senderId.slice(-6)}`;
+      if (accessToken) {
+        try {
+          const igUserId = (channel as unknown as { credentials?: { instagramAccountId?: string } }).credentials?.instagramAccountId || senderId;
+          const nameRes = await fetch(
+            `https://graph.instagram.com/v21.0/${igUserId}/conversations?platform=instagram&user_id=${senderId}&fields=participants&access_token=${accessToken}`
+          );
+          if (nameRes.ok) {
+            const nameData = await nameRes.json() as { data?: Array<{ participants?: { data?: Array<{ id: string; name?: string; username?: string }> } }> };
+            const participants = nameData.data?.[0]?.participants?.data || [];
+            const sender = participants.find((p) => p.id === senderId);
+            if (sender?.name) contactName = sender.name;
+            else if (sender?.username) contactName = `@${sender.username}`;
+          }
+        } catch (e) {
+          console.warn("[Webhook/IG] Could not fetch Instagram username:", e);
+        }
+      }
 
       const { data: newContact, error: contactCreateErr } = await supabase
         .from("contacts")
@@ -1352,6 +1370,7 @@ async function handleInstagramInboundMessage(
           organization_id: channel.organization_id,
           name: contactName,
           source: "instagram",
+          instagram: senderId,
         })
         .select("id")
         .single();
@@ -1360,11 +1379,15 @@ async function handleInstagramInboundMessage(
         console.error("[Webhook/IG] Error auto-creating contact:", contactCreateErr);
       } else {
         contactId = newContact.id;
-        console.log(`[Webhook/IG] Auto-created contact: ${contactId} for IGSID ${senderId}`);
+        console.log(`[Webhook/IG] Auto-created contact: ${contactId} (${contactName}) for IGSID ${senderId}`);
       }
     }
 
     // Create new conversation
+    const displayName = existingContact
+      ? `Instagram ${senderId.slice(-6)}`
+      : (await supabase.from("contacts").select("name").eq("id", contactId!).single()).data?.name || `Instagram ${senderId.slice(-6)}`;
+
     const { data: newConv, error: convCreateErr } = await supabase
       .from("messaging_conversations")
       .insert({
@@ -1372,11 +1395,10 @@ async function handleInstagramInboundMessage(
         channel_id: channel.id,
         business_unit_id: channel.business_unit_id,
         external_contact_id: senderId,
-        external_contact_name: `Instagram ${senderId.slice(-6)}`,
+        external_contact_name: displayName,
         contact_id: contactId,
         status: "open",
         priority: "normal",
-        // Instagram has a 24h window but no templates to reopen, so this is informative
         window_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       })
       .select("id")
@@ -1395,7 +1417,7 @@ async function handleInstagramInboundMessage(
           boardId: routingRule.boardId,
           stageId: routingRule.stageId,
           conversationId,
-          contactName: `Instagram ${senderId.slice(-6)}`,
+          contactName: displayName,
           businessUnitName: channel.business_unit?.name || "Sem unidade",
           source: "instagram",
         });

@@ -79,7 +79,7 @@ interface MetaApiError {
 // CONSTANTS
 // =============================================================================
 
-const META_GRAPH_URL = 'https://graph.facebook.com/v25.0';
+const META_GRAPH_URL = 'https://graph.instagram.com/v21.0';
 
 // =============================================================================
 // PROVIDER IMPLEMENTATION
@@ -147,7 +147,7 @@ export class MetaInstagramProvider extends BaseChannelProvider {
         name?: string;
         username?: string;
         error?: MetaApiError;
-      }>('GET', `/${this.instagramAccountId}`, undefined, {
+      }>('GET', `/me`, undefined, {
         fields: 'id,name,username',
       });
 
@@ -187,7 +187,7 @@ export class MetaInstagramProvider extends BaseChannelProvider {
 
       const response = await this.request<InstagramSendResponse>(
         'POST',
-        `/${this.pageId}/messages`,
+        `/me/messages`,
         messagePayload
       );
 
