@@ -822,12 +822,6 @@ async function handleInboundMessage(
         organization_id: channel.organization_id,
         name: contactName,
         source: "whatsapp",
-        metadata: {
-          auto_created: true,
-          created_from: "messaging_webhook",
-          whatsapp_name: senderName,
-          business_unit_id: channel.business_unit_id,
-        },
       };
 
       if (phone) insertData.phone = phone;
@@ -1358,12 +1352,6 @@ async function handleInstagramInboundMessage(
           organization_id: channel.organization_id,
           name: contactName,
           source: "instagram",
-          metadata: {
-            auto_created: true,
-            created_from: "messaging_webhook",
-            instagram_id: senderId,
-            business_unit_id: channel.business_unit_id,
-          },
         })
         .select("id")
         .single();
