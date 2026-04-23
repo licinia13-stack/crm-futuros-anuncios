@@ -116,3 +116,20 @@ export const EMAIL_SIGNATURE_HTML = `
   </tr>
 </table>
 `;
+
+export const EMAIL_SIGNATURE_PLAIN = `<table cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#374151;line-height:1.5;">
+  <tr><td style="padding-top:12px;padding-bottom:8px;">
+    <table cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="border-top:2px solid #7C3AED;width:32px;font-size:0;">&nbsp;</td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="font-weight:700;font-size:14px;color:#111827;">Lic&#237;nia Sim&#245;es</td></tr>
+  <tr><td style="color:#6b7280;font-size:12px;">Gestora de Marketing Digital &middot; Ag&#234;ncia Futuros An&#250;ncios</td></tr>
+  <tr><td style="padding-top:6px;font-size:12px;color:#374151;">
+    Tel: <a href="tel:+351916493687" style="color:#374151;text-decoration:none;">916 493 687</a>
+    &nbsp;&nbsp;|&nbsp;&nbsp;
+    <a href="mailto:geral@futurosanuncios.com" style="color:#374151;text-decoration:none;">geral@futurosanuncios.com</a>
+    &nbsp;&nbsp;|&nbsp;&nbsp;
+    <a href="https://futurosanuncios.com" style="color:#374151;text-decoration:none;">futurosanuncios.com</a>
+  </td></tr>
+</table>`;

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useId, useMemo } from 'react';
 import { useConnectedChannelsQuery } from '@/lib/query/hooks/useChannelsQuery';
-import { EMAIL_SIGNATURE_HTML } from '@/lib/email/signature';
+import { EMAIL_SIGNATURE_HTML, EMAIL_SIGNATURE_PLAIN } from '@/lib/email/signature';
 import { useQuery } from '@tanstack/react-query';
 import {
   useContacts,
@@ -168,6 +168,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const [emailBcc, setEmailBcc] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [signatureType, setSignatureType] = useState<'client' | 'prospecting'>('client');
   const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [objection, setObjection] = useState('');
@@ -328,7 +329,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       const conversationId = convRes.status === 409 ? convData.conversationId : convData.id;
       if (!conversationId) throw new Error(convData.error || 'Erro ao criar conversa');
 
-      const htmlBody = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${emailDraft.replace(/\n/g, '<br>')}</div><br><br>${EMAIL_SIGNATURE_HTML}`;
+      const sig = signatureType === 'prospecting' ? EMAIL_SIGNATURE_PLAIN : EMAIL_SIGNATURE_HTML;
+      const htmlBody = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${emailDraft.replace(/\n/g, '<br>')}</div><br><br>${sig}`;
       const msgRes = await fetch('/api/messaging/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1497,10 +1499,26 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
 
                         {/* Signature preview */}
                         <div className="shrink-0 pt-1">
-                          <p className="text-xs text-slate-400 mb-2">— Assinatura</p>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs text-slate-400">— Assinatura</p>
+                            <div className="flex items-center gap-1 bg-slate-100 dark:bg-white/5 rounded-lg p-0.5">
+                              <button
+                                onClick={() => setSignatureType('client')}
+                                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${signatureType === 'client' ? 'bg-white dark:bg-white/10 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+                              >
+                                Cliente
+                              </button>
+                              <button
+                                onClick={() => setSignatureType('prospecting')}
+                                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${signatureType === 'prospecting' ? 'bg-white dark:bg-white/10 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+                              >
+                                Prospeção
+                              </button>
+                            </div>
+                          </div>
                           <div
                             className="rounded-xl overflow-hidden pointer-events-none select-none opacity-80"
-                            dangerouslySetInnerHTML={{ __html: EMAIL_SIGNATURE_HTML }}
+                            dangerouslySetInnerHTML={{ __html: signatureType === 'prospecting' ? EMAIL_SIGNATURE_PLAIN : EMAIL_SIGNATURE_HTML }}
                           />
                         </div>
                       </div>
