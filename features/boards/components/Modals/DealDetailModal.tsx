@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useId, useMemo } from 'react';
 import { useConnectedChannelsQuery } from '@/lib/query/hooks/useChannelsQuery';
 import { EMAIL_SIGNATURE_HTML, EMAIL_SIGNATURE_PLAIN } from '@/lib/email/signature';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getClient } from '@/lib/supabase/client';
 import {
   useContacts,
   useCompanies,
@@ -169,7 +170,33 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const [emailSubject, setEmailSubject] = useState('');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [signatureType, setSignatureType] = useState<'client' | 'prospecting'>('client');
+  const queryClient = useQueryClient();
   const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const emailMessagesQueryKey = ['deal-email-messages', deal?.contactId];
+  const { data: emailMessages = [] } = useQuery({
+    queryKey: emailMessagesQueryKey,
+    queryFn: async () => {
+      if (!deal?.contactId) return [];
+      const supabase = getClient();
+      const { data: convs } = await supabase
+        .from('messaging_conversations')
+        .select('id, channel:messaging_channels!channel_id(channel_type)')
+        .eq('contact_id', deal.contactId);
+      const emailConvIds = (convs || [])
+        .filter((c) => (c.channel as { channel_type?: string } | null)?.channel_type === 'email')
+        .map((c) => c.id);
+      if (emailConvIds.length === 0) return [];
+      const { data: msgs } = await supabase
+        .from('messaging_messages')
+        .select('*')
+        .in('conversation_id', emailConvIds)
+        .order('created_at', { ascending: true });
+      return msgs || [];
+    },
+    enabled: !!deal?.contactId && activeTab === 'email',
+    staleTime: 15 * 1000,
+  });
 
   const [objection, setObjection] = useState('');
   const [objectionResponses, setObjectionResponses] = useState<string[]>([]);
@@ -355,6 +382,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       setEmailSubject('');
       setEmailCc('');
       setEmailBcc('');
+      queryClient.invalidateQueries({ queryKey: emailMessagesQueryKey });
     } catch (err: unknown) {
       addToast(err instanceof Error ? err.message : 'Erro ao enviar email', 'error');
     } finally {
@@ -1389,10 +1417,38 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                     {/* LEFT: Timeline read-only */}
                     <div className="w-80 shrink-0 border-r border-slate-200 dark:border-white/10 overflow-y-auto p-4 space-y-3">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Timeline</p>
-                      {dealNotes.length === 0 && dealActivities.length === 0 ? (
+                      {dealNotes.length === 0 && dealActivities.length === 0 && emailMessages.length === 0 ? (
                         <p className="text-sm text-slate-400 italic">Nenhuma atividade registrada.</p>
                       ) : (
                         <>
+                          {emailMessages.map((msg) => {
+                            const content = msg.content as { subject?: string; text?: string };
+                            const isOut = msg.direction === 'outbound';
+                            return (
+                              <div key={msg.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-3">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <Mail size={12} className={isOut ? 'text-primary-500 shrink-0' : 'text-emerald-500 shrink-0'} />
+                                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate flex-1">
+                                    {content?.subject || (isOut ? 'Email enviado' : 'Email recebido')}
+                                  </span>
+                                  <span className="text-xs text-slate-400 shrink-0">
+                                    {new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(msg.created_at))}
+                                  </span>
+                                </div>
+                                {content?.text && (
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 pl-5">{content.text}</p>
+                                )}
+                                <div className="flex items-center justify-between mt-1.5 pl-5">
+                                  <span className={`text-[10px] font-medium ${isOut ? 'text-primary-400' : 'text-emerald-400'}`}>
+                                    {isOut ? '↑ Enviado' : '↓ Recebido'}
+                                  </span>
+                                  {isOut && msg.status && (
+                                    <span className="text-[10px] text-slate-400 capitalize">{msg.status}</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                           {dealNotes.map(note => (
                             <div key={note.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-3">
                               <div className="flex items-center gap-2 mb-1.5">
