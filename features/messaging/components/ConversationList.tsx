@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback, memo } from 'react';
+import React, { useState, useMemo, useCallback, memo, useEffect } from 'react';
 import { Search, Filter, Inbox, CheckCircle, X, SquarePen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConversationItem } from './ConversationItem';
@@ -64,6 +64,10 @@ export const ConversationList = memo(function ConversationList({
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('open');
   const [searchQuery, setSearchQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<ChannelType | 'all'>(initialChannelFilter ?? 'all');
+
+  useEffect(() => {
+    setChannelFilter(initialChannelFilter ?? 'all');
+  }, [initialChannelFilter]);
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
