@@ -353,12 +353,13 @@ export function useMarkConversationRead() {
 
   return useMutation({
     mutationFn: async (conversationId: string) => {
-      const { error } = await supabase
-        .from('messaging_conversations')
-        .update({ unread_count: 0 })
-        .eq('id', conversationId);
-
-      if (error) throw error;
+      const res = await fetch(`/api/messaging/conversations/${conversationId}/read`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to mark as read');
+      }
       return conversationId;
     },
     onMutate: async (conversationId) => {
