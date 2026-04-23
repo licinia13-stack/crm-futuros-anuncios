@@ -389,6 +389,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
         isOpen={isComposeOpen}
         onClose={() => setIsComposeOpen(false)}
         onCreateConversation={handleCreateConversation}
+        allowedChannelTypes={channelParam === 'email' ? ['email'] : ['whatsapp', 'sms']}
       />
 
       {/* Delete Confirmation Modal */}

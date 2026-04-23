@@ -30,6 +30,7 @@ interface NewConversationModalProps {
   defaultContactId?: string;
   defaultContactName?: string;
   defaultContactIdentifier?: string;
+  allowedChannelTypes?: ChannelType[];
 }
 
 type Step = 'channel' | 'recipient' | 'confirm';
@@ -41,6 +42,7 @@ export function NewConversationModal({
   defaultContactId,
   defaultContactName,
   defaultContactIdentifier,
+  allowedChannelTypes,
 }: NewConversationModalProps) {
   const { data: channels = [], isLoading: isLoadingChannels } = useConnectedChannelsQuery();
 
@@ -76,10 +78,11 @@ export function NewConversationModal({
 
   const isEmail = selectedChannel?.channelType === 'email';
 
-  const initiableChannels = useMemo(
-    () => channels.filter((c) => ['whatsapp', 'sms', 'email'].includes(c.channelType)),
-    [channels]
-  );
+  const initiableChannels = useMemo(() => {
+    const base = ['whatsapp', 'sms', 'email'];
+    const allowed = allowedChannelTypes ?? base;
+    return channels.filter((c) => allowed.includes(c.channelType));
+  }, [channels, allowedChannelTypes]);
 
   const handleSelectChannel = (channel: MessagingChannel) => {
     setSelectedChannel(channel);
