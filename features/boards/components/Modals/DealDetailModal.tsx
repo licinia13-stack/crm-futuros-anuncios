@@ -307,7 +307,11 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   };
 
   const handleSendEmail = async () => {
-    if (!emailChannel || !emailTo.trim() || !emailDraft?.trim()) return;
+    if (!emailChannel) {
+      addToast('Nenhum canal de email configurado. Configure nas Definições → Canais.', 'error');
+      return;
+    }
+    if (!emailTo.trim() || !emailDraft?.trim()) return;
     setIsSendingEmail(true);
     try {
       const convRes = await fetch('/api/messaging/conversations', {
@@ -324,14 +328,16 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       const conversationId = convRes.status === 409 ? convData.conversationId : convData.id;
       if (!conversationId) throw new Error(convData.error || 'Erro ao criar conversa');
 
+      const htmlBody = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${emailDraft.replace(/\n/g, '<br>')}</div><br><br>${EMAIL_SIGNATURE_HTML}`;
       const msgRes = await fetch('/api/messaging/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversationId,
           content: {
-            type: 'html',
-            text: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${emailDraft.replace(/\n/g, '<br>')}</div><br><br>${EMAIL_SIGNATURE_HTML}`,
+            type: 'text',
+            text: emailDraft,
+            html: htmlBody,
             subject: emailSubject || undefined,
             cc: emailCc.trim() || undefined,
             bcc: emailBcc.trim() || undefined,

@@ -249,6 +249,8 @@ export class ResendEmailProvider extends BaseChannelProvider {
     const subject = (content as { subject?: string }).subject || 'Mensagem';
     const textContent = (content as { text?: string }).text || '';
     const htmlContent = (content as { html?: string }).html;
+    const ccField = (content as { cc?: string }).cc;
+    const bccField = (content as { bcc?: string }).bcc;
 
     try {
       const response = await this.client!.emails.send({
@@ -257,6 +259,8 @@ export class ResendEmailProvider extends BaseChannelProvider {
         subject,
         text: textContent,
         html: htmlContent,
+        cc: ccField ? [ccField] : undefined,
+        bcc: bccField ? [bccField] : undefined,
         replyTo: this.replyTo,
         headers: replyToExternalId
           ? { 'In-Reply-To': replyToExternalId, References: replyToExternalId }
