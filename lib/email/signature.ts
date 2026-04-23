@@ -16,8 +16,8 @@ export const EMAIL_SIGNATURE_HTML = `
 .sig-tagline{color:#7a8599!important;}
 .sig-contact{color:#94a3b8!important;}
 </style><![endif]-->
-<table class="sig-outer" cellpadding="0" cellspacing="0" border="0" width="520" bgcolor="#0d0a1e" background="${BASE}/email-card-bg.png"
-  style="width:520px;color-scheme:light;forced-color-adjust:none;background-color:#0d0a1e;background:radial-gradient(ellipse at 80% 35%,rgba(124,58,237,.20) 0%,transparent 60%),radial-gradient(ellipse at 10% 85%,rgba(27,79,216,.16) 0%,transparent 55%),linear-gradient(150deg,#07091c 0%,#0d0a1e 50%,#130820 100%);border-radius:16px;overflow:hidden;font-family:'Outfit',Helvetica,Arial,sans-serif;">
+<table class="sig-outer" cellpadding="0" cellspacing="0" border="0" width="520" bgcolor="#0d0a1e"
+  style="width:520px;background-color:#0d0a1e;background-image:url('${BASE}/email-card-bg.png');background-size:cover;background-position:center center;background-repeat:no-repeat;border-radius:16px;overflow:hidden;font-family:'Outfit',Helvetica,Arial,sans-serif;">
   <tr>
     <td height="4" bgcolor="#7C3AED" style="height:4px;font-size:0;line-height:0;background:linear-gradient(90deg,#1B4FD8 0%,#7C3AED 50%,#EC4899 100%);">&nbsp;</td>
   </tr>
