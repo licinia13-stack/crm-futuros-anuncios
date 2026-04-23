@@ -1,7 +1,7 @@
 const LOGO_URL = 'https://crm-futurosanuncios.vercel.app/logo-futuros-anuncios.png';
 
 export const EMAIL_SIGNATURE_HTML = `
-<style>@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap');</style>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet"><style>@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap');</style>
 <table cellpadding="0" cellspacing="0" border="0" width="520"
   style="width:520px;background:radial-gradient(ellipse at 80% 35%,rgba(124,58,237,.20) 0%,transparent 60%),radial-gradient(ellipse at 10% 85%,rgba(27,79,216,.16) 0%,transparent 55%),radial-gradient(ellipse at 50% 100%,rgba(219,39,119,.08) 0%,transparent 50%),linear-gradient(150deg,#07091c 0%,#0d0a1e 50%,#130820 100%);border-radius:16px;overflow:hidden;font-family:'Outfit',Helvetica,Arial,sans-serif;box-shadow:0 24px 80px rgba(0,0,0,.7),0 0 0 1px rgba(124,58,237,.15);">
   <tr>
