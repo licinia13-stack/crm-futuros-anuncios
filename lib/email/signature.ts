@@ -1,11 +1,14 @@
-const LOGO_URL = 'https://crm-futurosanuncios.vercel.app/logo-futuros-anuncios.png';
+const BASE = 'https://crm-futurosanuncios.vercel.app';
+const LOGO_URL = `${BASE}/logo-futuros-anuncios.png`;
+const ICON = (name: string) => `${BASE}/icons/${name}`;
 
 export const EMAIL_SIGNATURE_HTML = `
-<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet"><style>@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap');</style>
-<table cellpadding="0" cellspacing="0" border="0" width="520"
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
+<style>@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap');</style>
+<table cellpadding="0" cellspacing="0" border="0" width="520" bgcolor="#0d0a1e"
   style="width:520px;background:radial-gradient(ellipse at 80% 35%,rgba(124,58,237,.20) 0%,transparent 60%),radial-gradient(ellipse at 10% 85%,rgba(27,79,216,.16) 0%,transparent 55%),radial-gradient(ellipse at 50% 100%,rgba(219,39,119,.08) 0%,transparent 50%),linear-gradient(150deg,#07091c 0%,#0d0a1e 50%,#130820 100%);border-radius:16px;overflow:hidden;font-family:'Outfit',Helvetica,Arial,sans-serif;box-shadow:0 24px 80px rgba(0,0,0,.7),0 0 0 1px rgba(124,58,237,.15);">
   <tr>
-    <td height="4" style="height:4px;font-size:0;line-height:0;background:linear-gradient(90deg,#1B4FD8 0%,#7C3AED 50%,#EC4899 100%);">&nbsp;</td>
+    <td height="4" bgcolor="#7C3AED" style="height:4px;font-size:0;line-height:0;background:linear-gradient(90deg,#1B4FD8 0%,#7C3AED 50%,#EC4899 100%);">&nbsp;</td>
   </tr>
   <tr>
     <td style="padding:26px 30px 16px 30px;">
@@ -14,11 +17,11 @@ export const EMAIL_SIGNATURE_HTML = `
           <td width="148" valign="middle" style="padding-right:20px;">
             <table cellpadding="0" cellspacing="0" border="0" width="148">
               <tr>
-                <td style="background:linear-gradient(135deg,#1B4FD8,#7C3AED,#EC4899);border-radius:14px;padding:2px;line-height:0;">
+                <td bgcolor="#7C3AED" style="background:linear-gradient(135deg,#1B4FD8,#7C3AED,#EC4899);border-radius:14px;padding:2px;line-height:0;">
                   <table cellpadding="0" cellspacing="0" border="0" width="100%">
                     <tr>
-                      <td style="background:#07091c;border-radius:12px;padding:6px;line-height:0;">
-                        <img src="${LOGO_URL}" alt="Futuros Anúncios" width="132" style="display:block;width:132px;border-radius:8px;">
+                      <td bgcolor="#07091c" style="background:#07091c;border-radius:12px;padding:6px;line-height:0;">
+                        <img src="${LOGO_URL}" alt="Futuros An&#250;ncios" width="132" style="display:block;width:132px;border-radius:8px;">
                       </td>
                     </tr>
                   </table>
@@ -44,7 +47,7 @@ export const EMAIL_SIGNATURE_HTML = `
     <td style="padding:0 30px 18px 30px;">
       <table cellpadding="0" cellspacing="0" border="0" width="100%">
         <tr>
-          <td height="1" style="height:1px;font-size:0;line-height:0;background:linear-gradient(90deg,rgba(27,79,216,0) 0%,#1B4FD8 12%,#7C3AED 50%,#EC4899 88%,rgba(236,72,153,0) 100%);">&nbsp;</td>
+          <td height="1" bgcolor="#7C3AED" style="height:1px;font-size:0;line-height:0;background:linear-gradient(90deg,rgba(27,79,216,0) 0%,#1B4FD8 12%,#7C3AED 50%,#EC4899 88%,rgba(236,72,153,0) 100%);">&nbsp;</td>
         </tr>
       </table>
     </td>
@@ -80,25 +83,37 @@ export const EMAIL_SIGNATURE_HTML = `
       <table cellpadding="0" cellspacing="0" border="0"><tr>
         <td style="padding-right:8px;">
           <a href="https://wa.me/351916493687"
-            style="display:inline-block;width:34px;height:34px;background:#25D366;border-radius:8px;text-decoration:none;text-align:center;line-height:34px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:900;color:#ffffff;">W</a>
+            style="display:inline-block;width:34px;height:34px;background:#25D366;border-radius:8px;text-decoration:none;text-align:center;line-height:34px;">
+            <img src="${ICON('social-whatsapp.png')}" width="20" height="20" alt="WhatsApp"
+              style="display:inline-block;vertical-align:middle;width:20px;height:20px;border:0;">
+          </a>
         </td>
         <td style="padding-right:8px;">
           <a href="https://instagram.com/futurosanuncios"
-            style="display:inline-block;width:34px;height:34px;background:#C13584;border-radius:8px;text-decoration:none;text-align:center;line-height:34px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:900;color:#ffffff;letter-spacing:-0.5px;">ig</a>
+            style="display:inline-block;width:34px;height:34px;background:#C13584;border-radius:8px;text-decoration:none;text-align:center;line-height:34px;">
+            <img src="${ICON('social-instagram.png')}" width="20" height="20" alt="Instagram"
+              style="display:inline-block;vertical-align:middle;width:20px;height:20px;border:0;">
+          </a>
         </td>
         <td style="padding-right:8px;">
           <a href="https://facebook.com/futurosanuncios"
-            style="display:inline-block;width:34px;height:34px;background:#1877F2;border-radius:8px;text-decoration:none;text-align:center;line-height:34px;font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:900;color:#ffffff;">f</a>
+            style="display:inline-block;width:34px;height:34px;background:#1877F2;border-radius:8px;text-decoration:none;text-align:center;line-height:34px;">
+            <img src="${ICON('social-facebook.png')}" width="20" height="20" alt="Facebook"
+              style="display:inline-block;vertical-align:middle;width:20px;height:20px;border:0;">
+          </a>
         </td>
         <td>
           <a href="https://www.linkedin.com/company/futuros-anuncios"
-            style="display:inline-block;width:34px;height:34px;background:#0A66C2;border-radius:8px;text-decoration:none;text-align:center;line-height:34px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:900;color:#ffffff;letter-spacing:-0.5px;">in</a>
+            style="display:inline-block;width:34px;height:34px;background:#0A66C2;border-radius:8px;text-decoration:none;text-align:center;line-height:34px;">
+            <img src="${ICON('social-linkedin.png')}" width="20" height="20" alt="LinkedIn"
+              style="display:inline-block;vertical-align:middle;width:20px;height:20px;border:0;">
+          </a>
         </td>
       </tr></table>
     </td>
   </tr>
   <tr>
-    <td height="4" style="height:4px;font-size:0;line-height:0;background:linear-gradient(90deg,#EC4899 0%,#7C3AED 50%,#1B4FD8 100%);">&nbsp;</td>
+    <td height="4" bgcolor="#7C3AED" style="height:4px;font-size:0;line-height:0;background:linear-gradient(90deg,#EC4899 0%,#7C3AED 50%,#1B4FD8 100%);">&nbsp;</td>
   </tr>
 </table>
 `;

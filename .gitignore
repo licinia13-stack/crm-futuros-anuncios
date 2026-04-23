@@ -94,5 +94,6 @@ test/*.md
 debug_navigation_failed_*.png
 *.png
 !public/*.png
+!public/icons/*.png
 .env*.local
 .dmux/
