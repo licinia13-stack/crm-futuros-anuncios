@@ -5,6 +5,7 @@ import {
   MessageSquare,
   User,
   Phone,
+  Mail,
   Plus,
   X,
   ChevronRight,
@@ -21,13 +22,14 @@ interface NewConversationModalProps {
   onClose: () => void;
   onCreateConversation: (params: {
     channelId: string;
-    phoneNumber: string;
+    identifier: string;
     contactName?: string;
     contactId?: string;
+    subject?: string;
   }) => Promise<void>;
   defaultContactId?: string;
   defaultContactName?: string;
-  defaultContactPhone?: string;
+  defaultContactIdentifier?: string;
 }
 
 type Step = 'channel' | 'recipient' | 'confirm';
@@ -38,47 +40,47 @@ export function NewConversationModal({
   onCreateConversation,
   defaultContactId,
   defaultContactName,
-  defaultContactPhone,
+  defaultContactIdentifier,
 }: NewConversationModalProps) {
   const { data: channels = [], isLoading: isLoadingChannels } = useConnectedChannelsQuery();
 
-  // State
   const [step, setStep] = useState<Step>('channel');
   const [selectedChannel, setSelectedChannel] = useState<MessagingChannel | null>(null);
-  const [phoneNumber, setPhoneNumber] = useState(defaultContactPhone || '');
+  const [identifier, setIdentifier] = useState(defaultContactIdentifier || '');
   const [contactName, setContactName] = useState(defaultContactName || '');
+  const [subject, setSubject] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset all state when modal reopens (without unmount)
   useEffect(() => {
     if (isOpen) {
       setStep('channel');
       setSelectedChannel(null);
-      setPhoneNumber(defaultContactPhone || '');
+      setIdentifier(defaultContactIdentifier || '');
       setContactName(defaultContactName || '');
+      setSubject('');
       setIsCreating(false);
       setError(null);
     }
-  }, [isOpen, defaultContactPhone, defaultContactName]);
+  }, [isOpen, defaultContactIdentifier, defaultContactName]);
 
-  // Reset when modal closes/opens
   const handleClose = useCallback(() => {
     setStep('channel');
     setSelectedChannel(null);
-    setPhoneNumber(defaultContactPhone || '');
+    setIdentifier(defaultContactIdentifier || '');
     setContactName(defaultContactName || '');
+    setSubject('');
     setError(null);
     onClose();
-  }, [onClose, defaultContactPhone, defaultContactName]);
+  }, [onClose, defaultContactIdentifier, defaultContactName]);
 
-  // Filter channels by type (only whatsapp/sms can initiate)
+  const isEmail = selectedChannel?.channelType === 'email';
+
   const initiableChannels = useMemo(
-    () => channels.filter((c) => ['whatsapp', 'sms'].includes(c.channelType)),
+    () => channels.filter((c) => ['whatsapp', 'sms', 'email'].includes(c.channelType)),
     [channels]
   );
 
-  // Handlers
   const handleSelectChannel = (channel: MessagingChannel) => {
     setSelectedChannel(channel);
     setStep('recipient');
@@ -86,20 +88,24 @@ export function NewConversationModal({
   };
 
   const handleBack = () => {
-    if (step === 'recipient') {
-      setStep('channel');
-    } else if (step === 'confirm') {
-      setStep('recipient');
-    }
+    if (step === 'recipient') setStep('channel');
+    else if (step === 'confirm') setStep('recipient');
     setError(null);
   };
 
   const handleContinue = () => {
-    // Validate phone number
-    const cleanPhone = phoneNumber.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
-      setError('Número de telefone inválido');
-      return;
+    if (isEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(identifier)) {
+        setError('Endereço de email inválido');
+        return;
+      }
+    } else {
+      const cleanPhone = identifier.replace(/\D/g, '');
+      if (cleanPhone.length < 10) {
+        setError('Número de telefone inválido');
+        return;
+      }
     }
     setStep('confirm');
     setError(null);
@@ -112,12 +118,13 @@ export function NewConversationModal({
     setError(null);
 
     try {
-      const cleanPhone = phoneNumber.replace(/\D/g, '');
+      const cleanIdentifier = isEmail ? identifier.trim() : identifier.replace(/\D/g, '');
       await onCreateConversation({
         channelId: selectedChannel.id,
-        phoneNumber: cleanPhone,
+        identifier: cleanIdentifier,
         contactName: contactName || undefined,
         contactId: defaultContactId,
+        subject: isEmail && subject ? subject : undefined,
       });
       handleClose();
     } catch (err) {
@@ -127,41 +134,28 @@ export function NewConversationModal({
     }
   };
 
-  // Format phone for display
   const formatPhone = (value: string) => {
     const clean = value.replace(/\D/g, '');
     if (clean.length <= 2) return clean;
     if (clean.length <= 7) return `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
-    if (clean.length <= 11) {
-      return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
-    }
+    if (clean.length <= 11) return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
     return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7, 11)}`;
   };
 
+  const displayIdentifier = isEmail ? identifier : formatPhone(identifier);
+
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleClose}
-      title="Nova Conversa"
-      size="md"
-    >
+    <Modal isOpen={isOpen} onClose={handleClose} title="Novo Email" size="md">
       <div className="space-y-4">
         {/* Step indicator */}
         <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <span className={cn(step === 'channel' && 'text-primary-600 font-medium')}>
-            1. Canal
-          </span>
+          <span className={cn(step === 'channel' && 'text-primary-600 font-medium')}>1. Canal</span>
           <ChevronRight className="w-3 h-3" />
-          <span className={cn(step === 'recipient' && 'text-primary-600 font-medium')}>
-            2. Destinatário
-          </span>
+          <span className={cn(step === 'recipient' && 'text-primary-600 font-medium')}>2. Destinatário</span>
           <ChevronRight className="w-3 h-3" />
-          <span className={cn(step === 'confirm' && 'text-primary-600 font-medium')}>
-            3. Confirmar
-          </span>
+          <span className={cn(step === 'confirm' && 'text-primary-600 font-medium')}>3. Confirmar</span>
         </div>
 
-        {/* Error */}
         {error && (
           <div className="p-3 rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20">
             <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
@@ -171,10 +165,7 @@ export function NewConversationModal({
         {/* Step 1: Select channel */}
         {step === 'channel' && (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              Selecione um canal para iniciar a conversa:
-            </p>
-
+            <p className="text-sm text-slate-600 dark:text-slate-300">Selecione um canal:</p>
             {isLoadingChannels ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
@@ -182,12 +173,7 @@ export function NewConversationModal({
             ) : initiableChannels.length === 0 ? (
               <div className="text-center py-8">
                 <MessageSquare className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Nenhum canal conectado.
-                </p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                  Configure um canal WhatsApp ou SMS nas configurações.
-                </p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Nenhum canal conectado.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -205,12 +191,8 @@ export function NewConversationModal({
                   >
                     <ChannelIndicator type={channel.channelType as ChannelType} size="md" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                        {channel.name}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                        {channel.externalIdentifier}
-                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{channel.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{channel.externalIdentifier}</p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-400" />
                   </button>
@@ -225,37 +207,53 @@ export function NewConversationModal({
           <div className="space-y-4">
             <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-black/20">
               <ChannelIndicator type={selectedChannel.channelType as ChannelType} size="sm" />
-              <span className="text-sm text-slate-700 dark:text-slate-300">
-                {selectedChannel.name}
-              </span>
+              <span className="text-sm text-slate-700 dark:text-slate-300">{selectedChannel.name}</span>
             </div>
 
             <div className="space-y-3">
-              {/* Phone number */}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Número de telefone <span className="text-red-500">*</span>
+                  {isEmail ? 'Email do destinatário' : 'Número de telefone'} <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  {isEmail
+                    ? <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    : <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  }
                   <input
-                    type="tel"
-                    value={formatPhone(phoneNumber)}
-                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
-                    placeholder="(11) 99999-9999"
+                    type={isEmail ? 'email' : 'tel'}
+                    value={isEmail ? identifier : formatPhone(identifier)}
+                    onChange={(e) => setIdentifier(isEmail ? e.target.value : e.target.value.replace(/\D/g, ''))}
+                    placeholder={isEmail ? 'cliente@empresa.com' : '(11) 99999-9999'}
                     className={cn(
                       'w-full pl-10 pr-4 py-2.5 rounded-lg border',
-                      'bg-white dark:bg-black/20',
-                      'border-slate-200 dark:border-white/10',
-                      'text-slate-900 dark:text-white',
-                      'focus:outline-none focus:ring-2 focus:ring-primary-500'
+                      'bg-white dark:bg-black/20 border-slate-200 dark:border-white/10',
+                      'text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500'
                     )}
                     autoFocus
                   />
                 </div>
               </div>
 
-              {/* Contact name (optional) */}
+              {isEmail && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Assunto <span className="text-slate-400">(opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    placeholder="Assunto do email"
+                    className={cn(
+                      'w-full px-3 py-2.5 rounded-lg border',
+                      'bg-white dark:bg-black/20 border-slate-200 dark:border-white/10',
+                      'text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500'
+                    )}
+                  />
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   Nome do contato <span className="text-slate-400">(opcional)</span>
@@ -269,10 +267,8 @@ export function NewConversationModal({
                     placeholder="João Silva"
                     className={cn(
                       'w-full pl-10 pr-4 py-2.5 rounded-lg border',
-                      'bg-white dark:bg-black/20',
-                      'border-slate-200 dark:border-white/10',
-                      'text-slate-900 dark:text-white',
-                      'focus:outline-none focus:ring-2 focus:ring-primary-500'
+                      'bg-white dark:bg-black/20 border-slate-200 dark:border-white/10',
+                      'text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500'
                     )}
                   />
                 </div>
@@ -286,7 +282,7 @@ export function NewConversationModal({
           <div className="space-y-4">
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10">
               <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-3">
-                Confirmar nova conversa
+                {isEmail ? 'Confirmar novo email' : 'Confirmar nova conversa'}
               </h4>
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -297,17 +293,19 @@ export function NewConversationModal({
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-slate-500 dark:text-slate-400">Telefone:</dt>
-                  <dd className="text-slate-900 dark:text-white font-medium">
-                    {formatPhone(phoneNumber)}
-                  </dd>
+                  <dt className="text-slate-500 dark:text-slate-400">{isEmail ? 'Para:' : 'Telefone:'}</dt>
+                  <dd className="text-slate-900 dark:text-white font-medium">{displayIdentifier}</dd>
                 </div>
+                {isEmail && subject && (
+                  <div className="flex justify-between">
+                    <dt className="text-slate-500 dark:text-slate-400">Assunto:</dt>
+                    <dd className="text-slate-900 dark:text-white font-medium truncate max-w-[180px]">{subject}</dd>
+                  </div>
+                )}
                 {contactName && (
                   <div className="flex justify-between">
                     <dt className="text-slate-500 dark:text-slate-400">Nome:</dt>
-                    <dd className="text-slate-900 dark:text-white font-medium">
-                      {contactName}
-                    </dd>
+                    <dd className="text-slate-900 dark:text-white font-medium">{contactName}</dd>
                   </div>
                 )}
               </dl>
@@ -329,7 +327,6 @@ export function NewConversationModal({
             <button
               type="button"
               onClick={handleContinue}
-              disabled={phoneNumber.replace(/\D/g, '').length < 10}
               className={cn(
                 'inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold',
                 'bg-primary-600 text-white hover:bg-primary-700',
@@ -353,15 +350,9 @@ export function NewConversationModal({
               )}
             >
               {isCreating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Criando...
-                </>
+                <><Loader2 className="w-4 h-4 animate-spin" />A criar...</>
               ) : (
-                <>
-                  <Plus className="w-4 h-4" />
-                  Iniciar Conversa
-                </>
+                <><Plus className="w-4 h-4" />{isEmail ? 'Criar conversa' : 'Iniciar Conversa'}</>
               )}
             </button>
           )}

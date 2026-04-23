@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, memo } from 'react';
-import { Search, Filter, Inbox, CheckCircle, X } from 'lucide-react';
+import { Search, Filter, Inbox, CheckCircle, X, SquarePen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConversationItem } from './ConversationItem';
 import { ChannelIndicator } from './ChannelIndicator';
@@ -41,6 +41,8 @@ interface ConversationListProps {
   onSelect: (conversationId: string) => void;
   businessUnitId?: string;
   getPresence?: (contactId: string) => 'online' | 'typing' | 'recording' | 'offline';
+  initialChannelFilter?: ChannelType | 'all';
+  onOpenCompose?: () => void;
 }
 
 const CHANNEL_OPTIONS: { id: ChannelType | 'all'; label: string }[] = [
@@ -56,10 +58,12 @@ export const ConversationList = memo(function ConversationList({
   onSelect,
   businessUnitId,
   getPresence,
+  initialChannelFilter,
+  onOpenCompose,
 }: ConversationListProps) {
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('open');
   const [searchQuery, setSearchQuery] = useState('');
-  const [channelFilter, setChannelFilter] = useState<ChannelType | 'all'>('all');
+  const [channelFilter, setChannelFilter] = useState<ChannelType | 'all'>(initialChannelFilter ?? 'all');
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -98,6 +102,16 @@ export const ConversationList = memo(function ConversationList({
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Conversas
           </h2>
+          {onOpenCompose && (
+            <button
+              type="button"
+              onClick={onOpenCompose}
+              title="Novo email"
+              className="p-2 rounded-lg transition-colors text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-600 dark:hover:text-white"
+            >
+              <SquarePen className="w-4 h-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowFilters(!showFilters)}

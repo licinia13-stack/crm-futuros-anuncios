@@ -13,6 +13,7 @@ import { MessageThread } from './components/MessageThread';
 import { MessageInput } from './components/MessageInput';
 import { ContactPanel } from './components/ContactPanel';
 import { ContactLinkModal } from './components/Modals/ContactLinkModal';
+import { NewConversationModal } from './components/Modals/NewConversationModal';
 import { ChannelIndicator } from './components/ChannelIndicator';
 import { WindowExpiryBadge } from './components/WindowExpiryBadge';
 import { MessageSearchBar } from './components/MessageSearchBar';
@@ -55,7 +56,38 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     initialConversationId || conversationIdParam || undefined
   );
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const channelParam = searchParams.get('channel') as import('@/lib/messaging/types').ChannelType | null;
+
+  const handleCreateConversation = useCallback(async (params: {
+    channelId: string;
+    identifier: string;
+    contactName?: string;
+    contactId?: string;
+    subject?: string;
+  }) => {
+    const res = await fetch('/api/messaging/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channelId: params.channelId,
+        externalContactId: params.identifier,
+        externalContactName: params.contactName,
+        contactId: params.contactId,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (res.status === 409 && data.conversationId) {
+        setSelectedConversationId(data.conversationId);
+        return;
+      }
+      throw new Error(data.error || 'Erro ao criar conversa');
+    }
+    setSelectedConversationId(data.id);
+  }, []);
   const [showSearch, setShowSearch] = useState(false);
   const [replyToMessage, setReplyToMessage] = useState<import('@/lib/messaging/types').MessagingMessage | null>(null);
 
@@ -181,6 +213,8 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
           selectedId={selectedConversationId}
           onSelect={handleSelectConversation}
           getPresence={getPresence}
+          initialChannelFilter={channelParam ?? undefined}
+          onOpenCompose={() => setIsComposeOpen(true)}
         />
       </div>
 
@@ -349,6 +383,12 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
         currentContactId={selectedConversation?.contactId}
         suggestedPhone={selectedConversation?.contactPhone || undefined}
         suggestedName={selectedConversation?.externalContactName || undefined}
+      />
+
+      <NewConversationModal
+        isOpen={isComposeOpen}
+        onClose={() => setIsComposeOpen(false)}
+        onCreateConversation={handleCreateConversation}
       />
 
       {/* Delete Confirmation Modal */}

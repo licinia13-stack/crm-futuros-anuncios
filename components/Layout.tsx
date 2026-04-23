@@ -38,6 +38,7 @@ import {
   BarChart3,
   Inbox,
   MessageSquare,
+  Mail,
   Sparkles,
   LogOut,
   User,
@@ -71,6 +72,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 const PAGE_TITLES: Record<string, string> = {
   '/inbox': 'Inbox',
   '/messaging': 'Mensagens',
+  '/messaging?channel=email': 'Email',
   '/dashboard': 'Visão Geral',
   '/boards': 'Boards',
   '/pipeline': 'Boards',
@@ -302,6 +304,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           {[
             { to: '/inbox', icon: Inbox, label: 'Inbox', prefetch: 'inbox' as const, badge: undefined },
             { to: '/messaging', icon: MessageSquare, label: 'Mensagens', prefetch: undefined, badge: unreadMessagesCount },
+            { to: '/messaging?channel=email', icon: Mail, label: 'Email', prefetch: undefined, badge: undefined },
             { to: '/dashboard', icon: LayoutDashboard, label: 'Visão Geral', prefetch: 'dashboard' as const, badge: undefined },
             { to: '/boards', icon: KanbanSquare, label: 'Boards', prefetch: 'boards' as const, badge: undefined },
             { to: '/contacts', icon: Users, label: 'Contatos', prefetch: 'contacts' as const, badge: undefined },
