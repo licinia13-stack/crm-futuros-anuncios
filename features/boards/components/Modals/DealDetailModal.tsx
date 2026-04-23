@@ -1392,17 +1392,20 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                                   {new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(note.created_at))}
                                 </span>
                               </div>
-                              <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words line-clamp-4">{note.content}</p>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words select-text">{note.content}</p>
                             </div>
                           ))}
                           {dealActivities.map(activity => (
                             <div key={activity.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-3">
-                              <div className="flex items-center gap-2 mb-1">
-                                <CheckCircle2 size={12} className={activity.completed ? 'text-emerald-500' : 'text-slate-400'} />
-                                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{activity.title}</span>
+                              <div className="flex items-start gap-2 mb-1">
+                                <CheckCircle2 size={12} className={`shrink-0 mt-0.5 ${activity.completed ? 'text-emerald-500' : 'text-slate-400'}`} />
+                                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 select-text">{activity.title}</span>
                               </div>
+                              {activity.description && (
+                                <p className="text-xs text-slate-600 dark:text-slate-400 pl-5 whitespace-pre-wrap select-text">{activity.description}</p>
+                              )}
                               {activity.date && (
-                                <p className="text-xs text-slate-400 pl-5">
+                                <p className="text-xs text-slate-400 pl-5 mt-1">
                                   {PT_BR_DATE_FORMATTER.format(new Date(activity.date))}
                                 </p>
                               )}
