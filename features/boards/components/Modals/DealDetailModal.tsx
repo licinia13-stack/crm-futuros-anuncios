@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useId, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useId, useMemo, useCallback } from 'react';
+import { useConnectedChannelsQuery } from '@/lib/query/hooks/useChannelsQuery';
 import { useQuery } from '@tanstack/react-query';
 import {
   useContacts,
@@ -101,6 +102,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
 
   const { data: contacts = [] } = useContacts();
   const { data: companies = [] } = useCompanies();
+  const { data: allChannels = [] } = useConnectedChannelsQuery();
+  const emailChannel = allChannels.find(c => c.channelType === 'email') ?? null;
   const { data: activities = [] } = useActivities();
   const { data: boards = [] } = useBoards();
   const { activeBoardId } = useUIState();
@@ -158,7 +161,10 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const [aiResult, setAiResult] = useState<{ suggestion: string; score: number } | null>(null);
   const [emailDraft, setEmailDraft] = useState<string | null>(null);
   const [newNote, setNewNote] = useState('');
-  const [activeTab, setActiveTab] = useState<'timeline' | 'products' | 'info'>('timeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'products' | 'info' | 'email'>('timeline');
+  const [emailTo, setEmailTo] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
   const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [objection, setObjection] = useState('');
@@ -287,6 +293,57 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       setIsAnalyzing(false);
     }
   };
+
+  const handleOpenEmailTab = useCallback(() => {
+    const toEmail = deal?.contactEmail || company?.email || '';
+    setEmailTo(toEmail);
+    setEmailSubject('');
+    setActiveTab('email');
+  }, [deal?.contactEmail, company?.email]);
+
+  const handleSendEmail = useCallback(async () => {
+    if (!emailChannel || !emailTo.trim() || !emailDraft?.trim()) return;
+    setIsSendingEmail(true);
+    try {
+      const convRes = await fetch('/api/messaging/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelId: emailChannel.id,
+          externalContactId: emailTo.trim(),
+          externalContactName: deal?.contactName || deal?.companyName || emailTo,
+          contactId: deal?.contactId || undefined,
+        }),
+      });
+      const convData = await convRes.json();
+      const conversationId = convRes.status === 409 ? convData.conversationId : convData.id;
+      if (!conversationId) throw new Error(convData.error || 'Erro ao criar conversa');
+
+      const msgRes = await fetch('/api/messaging/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId,
+          content: {
+            type: 'text',
+            text: emailDraft,
+            subject: emailSubject || undefined,
+          },
+        }),
+      });
+      if (!msgRes.ok) {
+        const msgData = await msgRes.json();
+        throw new Error(msgData.message || 'Erro ao enviar email');
+      }
+      addToast('Email enviado com sucesso!', 'success');
+      setEmailDraft(null);
+      setEmailSubject('');
+    } catch (err: unknown) {
+      addToast(err instanceof Error ? err.message : 'Erro ao enviar email', 'error');
+    } finally {
+      setIsSendingEmail(false);
+    }
+  }, [emailChannel, emailTo, emailDraft, emailSubject, deal, addToast]);
 
   const handleDraftEmail = async () => {
     setIsDrafting(true);
@@ -420,7 +477,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       className={
         isMobile
           ? 'bg-white dark:bg-dark-card border border-slate-200 dark:border-white/10 w-full h-[100dvh] flex flex-col overflow-hidden pb-[var(--app-safe-area-bottom,0px)]'
-          : 'bg-white dark:bg-dark-card border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200'
+          : `bg-white dark:bg-dark-card border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl w-full ${activeTab === 'email' ? 'max-w-6xl' : 'max-w-4xl'} h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200`
       }
     >
           {/* HEADER (Stage Bar + Won/Lost) */}
@@ -927,12 +984,18 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                   >
                     IA Insights
                   </button>
+                  <button
+                    onClick={handleOpenEmailTab}
+                    className={`text-sm font-bold h-14 border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === 'email' ? 'border-primary-500 text-primary-600 dark:text-white' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                  >
+                    <Mail size={14} /> Email
+                  </button>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30 dark:bg-black/10">
+              <div className={`flex-1 min-h-0 ${activeTab === 'email' ? 'flex overflow-hidden' : 'overflow-y-auto p-6'} bg-slate-50/30 dark:bg-black/10`}>
                 {activeTab === 'timeline' && (
-                  <div className="space-y-6">
+                  <div className="space-y-6 p-6">
                     <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 shadow-sm">
                       <textarea
                         ref={noteTextareaRef}
@@ -1002,7 +1065,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                 )}
 
                 {activeTab === 'products' && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                  <div className="space-y-6 p-6 animate-in fade-in slide-in-from-bottom-4">
                     <div className="bg-slate-50 dark:bg-black/20 p-4 rounded-xl border border-slate-200 dark:border-white/10">
                       <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-3 flex items-center gap-2">
                         <Package size={16} /> Adicionar Produto/Serviço
@@ -1159,7 +1222,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                 )}
 
                 {activeTab === 'info' && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                  <div className="space-y-6 p-6 animate-in fade-in slide-in-from-bottom-4">
                     <div className="bg-linear-to-br from-primary-50 to-white dark:from-primary-900/10 dark:to-dark-card p-6 rounded-xl border border-primary-100 dark:border-primary-500/20">
                       <div className="flex items-center gap-3 mb-4">
                         <div className="p-2 bg-primary-100 dark:bg-primary-500/20 rounded-lg text-primary-600 dark:text-primary-400">
@@ -1302,6 +1365,118 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                       )}
                     </div>
                   </div>
+                )}
+
+                {activeTab === 'email' && (
+                  <>
+                    {/* LEFT: Timeline read-only */}
+                    <div className="w-80 shrink-0 border-r border-slate-200 dark:border-white/10 overflow-y-auto p-4 space-y-3">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Timeline</p>
+                      {dealNotes.length === 0 && dealActivities.length === 0 ? (
+                        <p className="text-sm text-slate-400 italic">Nenhuma atividade registrada.</p>
+                      ) : (
+                        <>
+                          {dealNotes.map(note => (
+                            <div key={note.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-3">
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <FileText size={12} className="text-primary-500 shrink-0" />
+                                <span className="text-xs text-slate-400">
+                                  {new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(note.created_at))}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words line-clamp-4">{note.content}</p>
+                            </div>
+                          ))}
+                          {dealActivities.map(activity => (
+                            <div key={activity.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-3">
+                              <div className="flex items-center gap-2 mb-1">
+                                <CheckCircle2 size={12} className={activity.completed ? 'text-emerald-500' : 'text-slate-400'} />
+                                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{activity.title}</span>
+                              </div>
+                              {activity.dueDate && (
+                                <p className="text-xs text-slate-400 pl-5">
+                                  {PT_BR_DATE_FORMATTER.format(new Date(activity.dueDate))}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+
+                    {/* RIGHT: Email compose */}
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                        {/* Para */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Para</label>
+                          <input
+                            type="email"
+                            value={emailTo}
+                            onChange={e => setEmailTo(e.target.value)}
+                            placeholder="email@cliente.com"
+                            className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+
+                        {/* Assunto */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Assunto</label>
+                          <input
+                            type="text"
+                            value={emailSubject}
+                            onChange={e => setEmailSubject(e.target.value)}
+                            placeholder="Proposta comercial..."
+                            className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+
+                        {/* Body */}
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Mensagem</label>
+                            <button
+                              onClick={handleDraftEmail}
+                              disabled={isDrafting}
+                              className="text-xs font-bold text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {isDrafting ? (
+                                <><div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> A gerar...</>
+                              ) : (
+                                <><BrainCircuit size={12} /> Gerar com IA</>
+                              )}
+                            </button>
+                          </div>
+                          <textarea
+                            value={emailDraft ?? ''}
+                            onChange={e => setEmailDraft(e.target.value)}
+                            placeholder="Escreva a mensagem ou clique em 'Gerar com IA'..."
+                            rows={12}
+                            className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Footer */}
+                      <div className="shrink-0 border-t border-slate-200 dark:border-white/10 px-6 py-4 flex items-center justify-between bg-white dark:bg-dark-card">
+                        {!emailChannel && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">Nenhum canal de email configurado.</p>
+                        )}
+                        {emailChannel && <div />}
+                        <button
+                          onClick={handleSendEmail}
+                          disabled={isSendingEmail || !emailChannel || !emailTo.trim() || !emailDraft?.trim()}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {isSendingEmail ? (
+                            <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> A enviar...</>
+                          ) : (
+                            <><Mail size={15} /> Enviar Email</>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
 
               </div>
