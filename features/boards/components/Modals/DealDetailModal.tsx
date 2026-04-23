@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useId, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useId, useMemo } from 'react';
 import { useConnectedChannelsQuery } from '@/lib/query/hooks/useChannelsQuery';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -294,14 +294,14 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
     }
   };
 
-  const handleOpenEmailTab = useCallback(() => {
+  const handleOpenEmailTab = () => {
     const toEmail = deal?.contactEmail || company?.email || '';
     setEmailTo(toEmail);
     setEmailSubject('');
     setActiveTab('email');
-  }, [deal?.contactEmail, company?.email]);
+  };
 
-  const handleSendEmail = useCallback(async () => {
+  const handleSendEmail = async () => {
     if (!emailChannel || !emailTo.trim() || !emailDraft?.trim()) return;
     setIsSendingEmail(true);
     try {
@@ -343,7 +343,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
     } finally {
       setIsSendingEmail(false);
     }
-  }, [emailChannel, emailTo, emailDraft, emailSubject, deal, addToast]);
+  };
 
   const handleDraftEmail = async () => {
     setIsDrafting(true);
