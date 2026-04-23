@@ -163,6 +163,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const [newNote, setNewNote] = useState('');
   const [activeTab, setActiveTab] = useState<'timeline' | 'products' | 'info' | 'email'>('timeline');
   const [emailTo, setEmailTo] = useState('');
+  const [emailCc, setEmailCc] = useState('');
+  const [emailBcc, setEmailBcc] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -297,6 +299,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const handleOpenEmailTab = () => {
     const toEmail = deal?.contactEmail || company?.email || '';
     setEmailTo(toEmail);
+    setEmailCc('');
+    setEmailBcc('');
     setEmailSubject('');
     setActiveTab('email');
   };
@@ -328,6 +332,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
             type: 'text',
             text: emailDraft,
             subject: emailSubject || undefined,
+            cc: emailCc.trim() || undefined,
+            bcc: emailBcc.trim() || undefined,
           },
         }),
       });
@@ -338,6 +344,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       addToast('Email enviado com sucesso!', 'success');
       setEmailDraft(null);
       setEmailSubject('');
+      setEmailCc('');
+      setEmailBcc('');
     } catch (err: unknown) {
       addToast(err instanceof Error ? err.message : 'Erro ao enviar email', 'error');
     } finally {
@@ -1407,16 +1415,38 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                     {/* RIGHT: Email compose */}
                     <div className="flex-1 flex flex-col overflow-hidden">
                       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                        {/* Para */}
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Para</label>
-                          <input
-                            type="email"
-                            value={emailTo}
-                            onChange={e => setEmailTo(e.target.value)}
-                            placeholder="email@cliente.com"
-                            className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
-                          />
+                        {/* Para / CC / BCC */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-8 shrink-0">Para</label>
+                            <input
+                              type="email"
+                              value={emailTo}
+                              onChange={e => setEmailTo(e.target.value)}
+                              placeholder="email@cliente.com"
+                              className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-8 shrink-0">CC</label>
+                            <input
+                              type="email"
+                              value={emailCc}
+                              onChange={e => setEmailCc(e.target.value)}
+                              placeholder="copia@exemplo.com"
+                              className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-8 shrink-0">BCC</label>
+                            <input
+                              type="email"
+                              value={emailBcc}
+                              onChange={e => setEmailBcc(e.target.value)}
+                              placeholder="copia.oculta@exemplo.com"
+                              className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </div>
                         </div>
 
                         {/* Assunto */}
