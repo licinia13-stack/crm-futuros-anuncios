@@ -1418,8 +1418,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
 
                     {/* RIGHT: Email compose */}
                     <div className="flex-1 flex flex-col overflow-hidden">
-                      <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                        {/* Para / CC / BCC */}
+                      {/* Fixed fields: Para/CC/BCC/Assunto */}
+                      <div className="shrink-0 px-6 pt-6 pb-3 space-y-2 border-b border-slate-200 dark:border-white/10">
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-8 shrink-0">Para</label>
@@ -1452,47 +1452,46 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                             />
                           </div>
                         </div>
-
-                        {/* Assunto */}
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Assunto</label>
+                        <div className="flex items-center gap-2 pt-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-16 shrink-0">Assunto</label>
                           <input
                             type="text"
                             value={emailSubject}
                             onChange={e => setEmailSubject(e.target.value)}
                             placeholder="Proposta comercial..."
-                            className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                            className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
                           />
                         </div>
+                      </div>
 
-                        {/* Body */}
-                        <div className="space-y-1.5 flex-1">
-                          <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Mensagem</label>
-                            <button
-                              onClick={handleDraftEmail}
-                              disabled={isDrafting}
-                              className="text-xs font-bold text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1 disabled:opacity-50"
-                            >
-                              {isDrafting ? (
-                                <><div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> A gerar...</>
-                              ) : (
-                                <><BrainCircuit size={12} /> Gerar com IA</>
-                              )}
-                            </button>
-                          </div>
-                          <textarea
-                            value={emailDraft ?? ''}
-                            onChange={e => setEmailDraft(e.target.value)}
-                            placeholder="Escreva a mensagem ou clique em 'Gerar com IA'..."
-                            rows={8}
-                            className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-                          />
+                      {/* Scrollable body: message + signature */}
+                      <div className="flex-1 overflow-y-auto flex flex-col px-6 pt-4 pb-4 gap-3">
+                        {/* Message label + AI button */}
+                        <div className="flex items-center justify-between shrink-0">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Mensagem</label>
+                          <button
+                            onClick={handleDraftEmail}
+                            disabled={isDrafting}
+                            className="text-xs font-bold text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1 disabled:opacity-50"
+                          >
+                            {isDrafting ? (
+                              <><div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> A gerar...</>
+                            ) : (
+                              <><BrainCircuit size={12} /> Gerar com IA</>
+                            )}
+                          </button>
                         </div>
+                        {/* Textarea grows to fill available space */}
+                        <textarea
+                          value={emailDraft ?? ''}
+                          onChange={e => setEmailDraft(e.target.value)}
+                          placeholder="Escreva a mensagem ou clique em 'Gerar com IA'..."
+                          className="flex-1 min-h-[220px] w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                        />
 
                         {/* Signature preview */}
-                        <div className="mt-2">
-                          <p className="text-xs text-slate-400 mb-1.5">— Assinatura</p>
+                        <div className="shrink-0 pt-1">
+                          <p className="text-xs text-slate-400 mb-2">— Assinatura</p>
                           <div
                             className="rounded-xl overflow-hidden pointer-events-none select-none opacity-80"
                             dangerouslySetInnerHTML={{ __html: EMAIL_SIGNATURE_HTML }}
