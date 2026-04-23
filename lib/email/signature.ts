@@ -6,8 +6,8 @@ export const EMAIL_SIGNATURE_HTML = `
 <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
 <style>@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap');</style>
 <!--[if mso]><style type="text/css">
-.sig-outer{background-color:#0d0a1e!important;}
-.sig-cell{background-color:#0d0a1e!important;}
+.sig-outer{background-color:#0d0a1e!important;color-scheme:light!important;}
+.sig-cell{background-color:#0d0a1e!important;color-scheme:light!important;}
 .sig-logo-border{background-color:#7C3AED!important;}
 .sig-logo-bg{background-color:#07091c!important;}
 .sig-name{color:#c4b5fd!important;font-family:'Times New Roman',serif!important;font-size:34px!important;}
@@ -17,7 +17,7 @@ export const EMAIL_SIGNATURE_HTML = `
 .sig-contact{color:#94a3b8!important;}
 </style><![endif]-->
 <table class="sig-outer" cellpadding="0" cellspacing="0" border="0" width="520" bgcolor="#0d0a1e"
-  style="width:520px;background-color:#0d0a1e;background:radial-gradient(ellipse at 80% 35%,rgba(124,58,237,.20) 0%,transparent 60%),radial-gradient(ellipse at 10% 85%,rgba(27,79,216,.16) 0%,transparent 55%),linear-gradient(150deg,#07091c 0%,#0d0a1e 50%,#130820 100%);border-radius:16px;overflow:hidden;font-family:'Outfit',Helvetica,Arial,sans-serif;">
+  style="width:520px;color-scheme:light;forced-color-adjust:none;background-color:#0d0a1e;background:radial-gradient(ellipse at 80% 35%,rgba(124,58,237,.20) 0%,transparent 60%),radial-gradient(ellipse at 10% 85%,rgba(27,79,216,.16) 0%,transparent 55%),linear-gradient(150deg,#07091c 0%,#0d0a1e 50%,#130820 100%);border-radius:16px;overflow:hidden;font-family:'Outfit',Helvetica,Arial,sans-serif;">
   <tr>
     <td height="4" bgcolor="#7C3AED" style="height:4px;font-size:0;line-height:0;background:linear-gradient(90deg,#1B4FD8 0%,#7C3AED 50%,#EC4899 100%);">&nbsp;</td>
   </tr>
