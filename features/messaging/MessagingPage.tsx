@@ -214,7 +214,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
           onSelect={handleSelectConversation}
           getPresence={getPresence}
           initialChannelFilter={channelParam ?? undefined}
-          onOpenCompose={() => setIsComposeOpen(true)}
+          onOpenCompose={channelParam === 'email' ? () => setIsComposeOpen(true) : undefined}
         />
       </div>
 
