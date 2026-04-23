@@ -30,7 +30,7 @@ export const EMAIL_SIGNATURE_HTML = `
             </table>
           </td>
           <td valign="middle">
-            <p style="margin:0;padding:0;font-family:'Great Vibes','Segoe Script','Brush Script MT','Lucida Handwriting',cursive;font-size:36px;font-weight:400;line-height:1.15;background:linear-gradient(90deg,#93c5fd 0%,#c4b5fd 55%,#f9a8d4 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:#c4b5fd;">Lic&#237;nia Sim&#245;es</p>
+            <p style="margin:0;padding:0;font-family:'Great Vibes','Monotype Corsiva','Cormorant Garamond',cursive;font-size:38px;font-weight:400;line-height:1.15;background:linear-gradient(90deg,#93c5fd 0%,#c4b5fd 55%,#f9a8d4 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:#c4b5fd;">Lic&#237;nia Sim&#245;es</p>
             <p style="margin:7px 0 0 0;padding:0;font-family:'Outfit',Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:2.4px;text-transform:uppercase;color:#8b5cf6;">Gestora de Marketing Digital</p>
             <p style="margin:4px 0 0 0;padding:0;font-family:'Outfit',Helvetica,Arial,sans-serif;font-size:11px;font-weight:300;color:#8892a4;letter-spacing:.3px;">Ag&#234;ncia Futuros An&#250;ncios</p>
           </td>
