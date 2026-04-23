@@ -118,18 +118,49 @@ export const EMAIL_SIGNATURE_HTML = `
 `;
 
 export const EMAIL_SIGNATURE_PLAIN = `<table cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#374151;line-height:1.5;">
-  <tr><td style="padding-top:12px;padding-bottom:8px;">
+  <tr><td style="padding-top:12px;padding-bottom:10px;">
     <table cellpadding="0" cellspacing="0" border="0"><tr>
       <td style="border-top:2px solid #7C3AED;width:32px;font-size:0;">&nbsp;</td>
     </tr></table>
   </td></tr>
-  <tr><td style="font-weight:700;font-size:14px;color:#111827;">Lic&#237;nia Sim&#245;es</td></tr>
-  <tr><td style="color:#6b7280;font-size:12px;">Gestora de Marketing Digital &middot; Ag&#234;ncia Futuros An&#250;ncios</td></tr>
-  <tr><td style="padding-top:6px;font-size:12px;color:#374151;">
-    Tel: <a href="tel:+351916493687" style="color:#374151;text-decoration:none;">916 493 687</a>
-    &nbsp;&nbsp;|&nbsp;&nbsp;
-    <a href="mailto:geral@futurosanuncios.com" style="color:#374151;text-decoration:none;">geral@futurosanuncios.com</a>
-    &nbsp;&nbsp;|&nbsp;&nbsp;
-    <a href="https://futurosanuncios.com" style="color:#374151;text-decoration:none;">futurosanuncios.com</a>
+  <tr><td style="padding-bottom:8px;">
+    <table cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="padding-right:12px;vertical-align:middle;">
+        <img src="${LOGO_URL}" alt="Futuros An&#250;ncios" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:8px;border:0;">
+      </td>
+      <td style="vertical-align:middle;">
+        <p style="margin:0;padding:0;font-weight:700;font-size:15px;color:#111827;">Lic&#237;nia Sim&#245;es</p>
+        <p style="margin:2px 0 0 0;padding:0;font-size:11px;color:#6b7280;">Gestora de Marketing Digital &middot; Ag&#234;ncia Futuros An&#250;ncios</p>
+      </td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="padding-bottom:8px;font-size:12px;color:#374151;">
+    &#9990; <a href="tel:+351916493687" style="color:#374151;text-decoration:none;">916 493 687</a>
+    &nbsp;&nbsp;&#9993; <a href="mailto:geral@futurosanuncios.com" style="color:#374151;text-decoration:none;">geral@futurosanuncios.com</a>
+    &nbsp;&nbsp;&#8853; <a href="https://futurosanuncios.com" style="color:#374151;text-decoration:none;">futurosanuncios.com</a>
+  </td></tr>
+  <tr><td>
+    <table cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="padding-right:6px;">
+        <a href="https://wa.me/351916493687" style="display:inline-block;width:28px;height:28px;background:#25D366;border-radius:6px;text-align:center;line-height:28px;text-decoration:none;">
+          <img src="${ICON('social-whatsapp.png')}" width="16" height="16" alt="WhatsApp" style="display:inline-block;vertical-align:middle;width:16px;height:16px;border:0;">
+        </a>
+      </td>
+      <td style="padding-right:6px;">
+        <a href="https://instagram.com/futurosanuncios" style="display:inline-block;width:28px;height:28px;background:#C13584;border-radius:6px;text-align:center;line-height:28px;text-decoration:none;">
+          <img src="${ICON('social-instagram.png')}" width="16" height="16" alt="Instagram" style="display:inline-block;vertical-align:middle;width:16px;height:16px;border:0;">
+        </a>
+      </td>
+      <td style="padding-right:6px;">
+        <a href="https://facebook.com/futurosanuncios" style="display:inline-block;width:28px;height:28px;background:#1877F2;border-radius:6px;text-align:center;line-height:28px;text-decoration:none;">
+          <img src="${ICON('social-facebook.png')}" width="16" height="16" alt="Facebook" style="display:inline-block;vertical-align:middle;width:16px;height:16px;border:0;">
+        </a>
+      </td>
+      <td>
+        <a href="https://www.linkedin.com/company/futuros-anuncios" style="display:inline-block;width:28px;height:28px;background:#0A66C2;border-radius:6px;text-align:center;line-height:28px;text-decoration:none;">
+          <img src="${ICON('social-linkedin.png')}" width="16" height="16" alt="LinkedIn" style="display:inline-block;vertical-align:middle;width:16px;height:16px;border:0;">
+        </a>
+      </td>
+    </tr></table>
   </td></tr>
 </table>`;

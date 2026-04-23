@@ -1517,7 +1517,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                             </div>
                           </div>
                           <div
-                            className="rounded-xl overflow-hidden pointer-events-none select-none opacity-80"
+                            className={`rounded-xl overflow-hidden pointer-events-none select-none opacity-80 ${signatureType === 'prospecting' ? 'bg-white p-3' : ''}`}
                             dangerouslySetInnerHTML={{ __html: signatureType === 'prospecting' ? EMAIL_SIGNATURE_PLAIN : EMAIL_SIGNATURE_HTML }}
                           />
                         </div>
