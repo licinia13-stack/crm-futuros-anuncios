@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useId, useMemo } from 'react';
 import { useConnectedChannelsQuery } from '@/lib/query/hooks/useChannelsQuery';
+import { EMAIL_SIGNATURE_HTML } from '@/lib/email/signature';
 import { useQuery } from '@tanstack/react-query';
 import {
   useContacts,
@@ -329,8 +330,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
         body: JSON.stringify({
           conversationId,
           content: {
-            type: 'text',
-            text: emailDraft,
+            type: 'html',
+            text: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${emailDraft.replace(/\n/g, '<br>')}</div><br><br>${EMAIL_SIGNATURE_HTML}`,
             subject: emailSubject || undefined,
             cc: emailCc.trim() || undefined,
             bcc: emailBcc.trim() || undefined,
@@ -1484,8 +1485,17 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                             value={emailDraft ?? ''}
                             onChange={e => setEmailDraft(e.target.value)}
                             placeholder="Escreva a mensagem ou clique em 'Gerar com IA'..."
-                            rows={12}
+                            rows={8}
                             className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                          />
+                        </div>
+
+                        {/* Signature preview */}
+                        <div className="mt-2">
+                          <p className="text-xs text-slate-400 mb-1.5">— Assinatura</p>
+                          <div
+                            className="rounded-xl overflow-hidden pointer-events-none select-none opacity-80"
+                            dangerouslySetInnerHTML={{ __html: EMAIL_SIGNATURE_HTML }}
                           />
                         </div>
                       </div>
