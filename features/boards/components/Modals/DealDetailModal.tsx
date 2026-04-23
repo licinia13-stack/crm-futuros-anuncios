@@ -1393,9 +1393,9 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                                 <CheckCircle2 size={12} className={activity.completed ? 'text-emerald-500' : 'text-slate-400'} />
                                 <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{activity.title}</span>
                               </div>
-                              {activity.dueDate && (
+                              {activity.date && (
                                 <p className="text-xs text-slate-400 pl-5">
-                                  {PT_BR_DATE_FORMATTER.format(new Date(activity.dueDate))}
+                                  {PT_BR_DATE_FORMATTER.format(new Date(activity.date))}
                                 </p>
                               )}
                             </div>
