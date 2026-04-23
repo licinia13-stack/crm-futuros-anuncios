@@ -61,7 +61,7 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
         phone2: '', email2: '',
         website: '', facebook: '', instagram: '',
         linkedin: '', tiktok: '', googleMaps: '',
-        googleMyBusiness: '', youtube: '', nif: ''
+        googleMyBusiness: '', youtube: '', nif: '', whatsapp: ''
     });
 
     // Estado de UI
@@ -74,7 +74,7 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
         setIsCreatingNew(false);
         setNewContactData({ name: '', email: '', phone: '', companyName: '' });
         setDealData({ title: '', value: '' });
-        setCompanyData({ address: '', address2: '', address3: '', phone2: '', email2: '', website: '', facebook: '', instagram: '', linkedin: '', tiktok: '', googleMaps: '', googleMyBusiness: '', youtube: '', nif: '' });
+        setCompanyData({ address: '', address2: '', address3: '', phone2: '', email2: '', website: '', facebook: '', instagram: '', linkedin: '', tiktok: '', googleMaps: '', googleMyBusiness: '', youtube: '', nif: '', whatsapp: '' });
         setShowCompanyFields(true);
         setError(null);
         setIsSubmitting(false);
@@ -186,6 +186,7 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
                 google_maps:        companyData.googleMaps || undefined,
                 google_my_business: companyData.googleMyBusiness || undefined,
                 youtube:            companyData.youtube || undefined,
+                whatsapp:           companyData.whatsapp || undefined,
             } : {};
 
             // Se selecionou contato existente
@@ -451,6 +452,7 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
                                 {/* Redes Sociais */}
                                 <p className="text-xs text-slate-400 uppercase font-bold pt-1">Redes Sociais</p>
                                 {([
+                                    { key: 'whatsapp',         label: 'WhatsApp',           color: 'text-green-500' },
                                     { key: 'facebook',         label: 'Facebook',           color: 'text-blue-500' },
                                     { key: 'instagram',        label: 'Instagram',          color: 'text-pink-500' },
                                     { key: 'linkedin',         label: 'LinkedIn',           color: 'text-blue-700' },

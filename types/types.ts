@@ -155,6 +155,7 @@ export interface CRMCompany {
   googleMaps?: string;
   googleMyBusiness?: string;
   youtube?: string;
+  whatsapp?: string;
   createdAt: string;
   updatedAt?: string;
 }

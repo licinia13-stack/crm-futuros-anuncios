@@ -124,6 +124,7 @@ export interface DbCRMCompany {
   google_maps?: string | null;
   google_my_business?: string | null;
   youtube?: string | null;
+  whatsapp?: string | null;
 }
 
 /**
@@ -186,6 +187,7 @@ const transformCRMCompany = (db: DbCRMCompany): CRMCompany => ({
   googleMaps: db.google_maps || undefined,
   googleMyBusiness: db.google_my_business || undefined,
   youtube: db.youtube || undefined,
+  whatsapp: db.whatsapp || undefined,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 });
@@ -745,6 +747,7 @@ export const companiesService = {
       if (updates.googleMaps !== undefined) dbUpdates.google_maps = updates.googleMaps || null;
       if (updates.googleMyBusiness !== undefined) dbUpdates.google_my_business = updates.googleMyBusiness || null;
       if (updates.youtube !== undefined) dbUpdates.youtube = updates.youtube || null;
+      if (updates.whatsapp !== undefined) dbUpdates.whatsapp = updates.whatsapp || null;
       dbUpdates.updated_at = new Date().toISOString();
 
       const { error } = await supabase
