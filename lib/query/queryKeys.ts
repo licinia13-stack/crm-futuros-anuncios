@@ -83,6 +83,7 @@ export const queryKeys = {
           [...base.all, 'filtered',
             filters?.status ?? null,
             filters?.channelId ?? null,
+            filters?.channelType ?? null,
             filters?.businessUnitId ?? null,
             filters?.assignedUserId ?? null,
             filters?.hasUnread ?? null,
