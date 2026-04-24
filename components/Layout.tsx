@@ -105,8 +105,6 @@ interface LayoutProps {
  * @param props.icon - Componente de ícone Lucide
  * @param props.label - Label exibido
  * @param props.prefetch - Nome da rota para prefetch
- * @param props.clickedPath - Path que foi clicado (para manter highlight durante transição)
- * @param props.onItemClick - Callback quando o item é clicado
  * @param props.badge - Badge count to display
  */
 const NavItem = ({
@@ -114,8 +112,6 @@ const NavItem = ({
   icon: Icon,
   label,
   prefetch,
-  clickedPath,
-  onItemClick,
   badge,
   channelParam,
 }: {
@@ -123,8 +119,6 @@ const NavItem = ({
   icon: React.ComponentType<{ size?: number; className?: string }>;
   label: string;
   prefetch?: RouteName;
-  clickedPath?: string;
-  onItemClick?: (path: string) => void;
   badge?: number;
   channelParam?: string | null;
 }) => {
@@ -134,27 +128,20 @@ const NavItem = ({
     if (to === '/messaging') return pathname === '/messaging' && channelParam !== 'email';
     return pathname === to || (to === '/boards' && pathname === '/pipeline');
   })();
-  const wasJustClicked = clickedPath === to;
-
-  // If user clicked on a DIFFERENT item, immediately deactivate this one
-  // This prevents the delay showing both items as active
-  const anotherItemWasClicked = clickedPath && clickedPath !== to;
-  const isActuallyActive = anotherItemWasClicked ? false : (isActive || wasJustClicked);
 
   return (
     <Link
       href={to}
       onMouseEnter={prefetch ? () => prefetchRoute(prefetch) : undefined}
       onFocus={prefetch ? () => prefetchRoute(prefetch) : undefined}
-      onClick={() => onItemClick?.(to)}
       className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium focus-visible-ring
-    ${isActuallyActive
+    ${isActive
           ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-900/50'
           : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
         }`}
     >
       <div className="relative">
-        <Icon size={20} className={isActuallyActive ? 'text-primary-500' : ''} aria-hidden="true" />
+        <Icon size={20} className={isActive ? 'text-primary-500' : ''} aria-hidden="true" />
         {(badge ?? 0) > 0 && (
           <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold text-white bg-red-500 rounded-full shadow-sm">
             {badge! > 99 ? '99+' : badge}
@@ -239,23 +226,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     setIsMoreOpen(false);
   }, [pathname]);
 
-  // Track the last clicked menu item to maintain highlight during Suspense transitions
-  const [clickedPath, setClickedPath] = useState<string | undefined>(undefined);
-
-  // Clear clickedPath only when the clicked route actually becomes active.
-  // Must account for query-string routes like /messaging?channel=email,
-  // because usePathname() never includes the query string.
-  React.useEffect(() => {
-    if (!clickedPath) return;
-    const [clickedBase, clickedQuery] = clickedPath.split('?');
-    const clickedChannel = clickedQuery ? new URLSearchParams(clickedQuery).get('channel') : null;
-    const isNowActive =
-      (pathname === clickedBase && channelParam === clickedChannel) ||
-      (clickedPath === '/boards' && pathname === '/pipeline') ||
-      (clickedPath === '/pipeline' && pathname === '/boards');
-    if (isNowActive) setClickedPath(undefined);
-  }, [pathname, clickedPath, channelParam]);
-
   const toggleDebugMode = () => {
     if (debugEnabled) {
       disableDebugMode();
@@ -328,18 +298,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                       <Link
                         href={item.to}
                         onMouseEnter={() => item.prefetch && prefetchRoute(item.prefetch)}
-                        onClick={() => setClickedPath(item.to)}
                         className={(() => {
                           const isActive = (() => {
                             if (item.to === '/messaging?channel=email') return pathname === '/messaging' && channelParam === 'email';
                             if (item.to === '/messaging') return pathname === '/messaging' && channelParam !== 'email';
                             return pathname === item.to || (item.to === '/boards' && pathname === '/pipeline');
                           })();
-                          const wasJustClicked = clickedPath === item.to;
-                          // If user clicked on a DIFFERENT item, immediately deactivate this one
-                          const anotherItemWasClicked = clickedPath && clickedPath !== item.to;
-                          const isActuallyActive = anotherItemWasClicked ? false : (isActive || wasJustClicked);
-                          return `relative w-10 h-10 rounded-lg flex items-center justify-center ${isActuallyActive
+                          return `relative w-10 h-10 rounded-lg flex items-center justify-center ${isActive
                             ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-900/50'
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
                             }`;
@@ -368,8 +333,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 icon={item.icon}
                 label={item.label}
                 prefetch={item.prefetch}
-                clickedPath={clickedPath}
-                onItemClick={setClickedPath}
                 badge={item.badge}
                 channelParam={channelParam}
               />

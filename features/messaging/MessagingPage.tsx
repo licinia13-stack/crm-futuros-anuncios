@@ -137,6 +137,15 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     deleteConversation(idToDelete);
   }, [selectedConversationId, deleteConversation, router, queryClient]);
 
+  // Clear selection when switching between Mensagens and Email tabs
+  const prevChannelParamRef = React.useRef(channelParam);
+  useEffect(() => {
+    if (prevChannelParamRef.current !== channelParam) {
+      prevChannelParamRef.current = channelParam;
+      setSelectedConversationId(undefined);
+    }
+  }, [channelParam]);
+
   // Clear URL if conversation was deleted or not found
   useEffect(() => {
     if (selectedConversationId && selectedConversation === null && !isConversationLoading) {
