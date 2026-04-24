@@ -1068,7 +1068,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
             </div>
 
             {/* Right Content (Tabs & Timeline) */}
-            <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-dark-card">
+            <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-white dark:bg-dark-card">
               <div className="h-14 border-b border-slate-200 dark:border-white/5 flex items-center px-6 shrink-0">
                 <div className="flex gap-6">
                   <button
@@ -1740,10 +1740,12 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                               </button>
                             </div>
                           </div>
-                          <div
-                            className={`rounded-xl overflow-hidden pointer-events-none select-none opacity-80 ${signatureType === 'prospecting' ? 'bg-white p-3' : ''}`}
-                            dangerouslySetInnerHTML={{ __html: signatureType === 'prospecting' ? EMAIL_SIGNATURE_PLAIN : EMAIL_SIGNATURE_HTML }}
-                          />
+                          <div className="max-w-full overflow-x-hidden">
+                            <div
+                              className={`rounded-xl overflow-hidden pointer-events-none select-none opacity-80 ${signatureType === 'prospecting' ? 'bg-white p-3' : ''}`}
+                              dangerouslySetInnerHTML={{ __html: signatureType === 'prospecting' ? EMAIL_SIGNATURE_PLAIN : EMAIL_SIGNATURE_HTML }}
+                            />
+                          </div>
                         </div>
                       </div>
 
