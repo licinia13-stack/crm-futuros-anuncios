@@ -720,6 +720,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                     dealBoard.lostStageId === stageId ||
                     targetStage?.linkedLifecycleStage === 'OTHER';
 
+                  if (stageId === deal.status) return;
+
                   if (isLostStage) {
                     // Show loss reason modal
                     setPendingLostStageId(stageId);

@@ -480,6 +480,12 @@ export const useBoardsController = () => {
         return;
       }
 
+      // Guard: skip if already in the same stage (drag & drop within same column)
+      if (deal.status === stageId) {
+        setDraggingId(null);
+        return;
+      }
+
       // Find the target stage to check if it's a won/lost stage
       const targetStage = activeBoard.stages.find(s => s.id === stageId);
 
@@ -544,6 +550,8 @@ export const useBoardsController = () => {
       addToast('Aguarde o negócio salvar para mover (1s) e tente novamente.', 'info');
       return;
     }
+
+    if (deal.status === newStageId) return;
 
     // Find the target stage to check if it's a lost stage
     const targetStage = activeBoard.stages.find(s => s.id === newStageId);
