@@ -153,12 +153,13 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
   }, [selectedConversationId, selectedConversation, markAsRead]);
 
 
-  // Update URL when conversation changes
+  // Update URL when conversation changes (preserve channel param so email filter stays active)
   const handleSelectConversation = useCallback((id: string) => {
     setSelectedConversationId(id);
     setShowSearch(false);
-    router.push(`/messaging?id=${id}`, { scroll: false });
-  }, [router]);
+    const channelSuffix = channelParam ? `&channel=${channelParam}` : '';
+    router.push(`/messaging?id=${id}${channelSuffix}`, { scroll: false });
+  }, [router, channelParam]);
 
   // Link conversation to contact
   const handleLinkContact = useCallback(async (contactId: string) => {

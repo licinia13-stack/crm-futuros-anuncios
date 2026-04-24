@@ -236,24 +236,34 @@ export function useConversation(conversationId: string | undefined) {
 }
 
 /**
- * Fetch unread conversations count.
+ * Fetch unread conversations count, optionally scoped to a channel type.
+ * Pass channelType='email' for email badge, or excludeChannelType='email' for messaging badge.
  */
-export function useUnreadCount() {
+export function useUnreadCount(options?: { channelType?: string; excludeChannelType?: string }) {
   const { user, loading: authLoading } = useAuth();
 
   return useQuery({
-    queryKey: queryKeys.messagingConversations.unreadCount(),
+    queryKey: [...queryKeys.messagingConversations.unreadCount(), options ?? null],
     queryFn: async (): Promise<number> => {
-      const { count, error } = await supabase
+      const { data, error } = await supabase
         .from('messaging_conversations')
-        .select('*', { count: 'exact', head: true })
+        .select('channel:messaging_channels!channel_id(channel_type)', { count: 'exact' })
         .gt('unread_count', 0)
         .eq('status', 'open');
 
       if (error) throw error;
-      return count || 0;
+
+      const rows = (data || []) as { channel: { channel_type: string } | null }[];
+
+      if (options?.channelType) {
+        return rows.filter(r => r.channel?.channel_type === options.channelType).length;
+      }
+      if (options?.excludeChannelType) {
+        return rows.filter(r => r.channel?.channel_type !== options.excludeChannelType).length;
+      }
+      return rows.length;
     },
-    staleTime: 60 * 1000, // 60s - realtime subscription handles live updates
+    staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
     enabled: !authLoading && !!user,
   });

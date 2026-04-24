@@ -186,8 +186,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   // Initialize deterministically and sync on mount to avoid hydration mismatch warnings.
   const [debugEnabled, setDebugEnabled] = useState(false);
 
-  // Messaging unread count for notification badge
-  const { data: unreadMessagesCount = 0 } = useUnreadCount();
+  // Messaging unread count for notification badge (split by channel)
+  const { data: unreadMessagesCount = 0 } = useUnreadCount({ excludeChannelType: 'email' });
+  const { data: unreadEmailCount = 0 } = useUnreadCount({ channelType: 'email' });
 
   useEffect(() => {
     setDebugEnabled(isDebugMode());
@@ -303,8 +304,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <nav className={`flex-1 p-4 space-y-2 flex flex-col ${sidebarCollapsed ? 'items-center px-2' : ''}`} aria-label="Navegação do sistema">
           {[
             { to: '/inbox', icon: Inbox, label: 'Inbox', prefetch: 'inbox' as const, badge: undefined },
-            { to: '/messaging', icon: MessageSquare, label: 'Mensagens', prefetch: undefined, badge: unreadMessagesCount },
-            { to: '/messaging?channel=email', icon: Mail, label: 'Email', prefetch: undefined, badge: undefined },
+            { to: '/messaging', icon: MessageSquare, label: 'Mensagens', prefetch: undefined, badge: unreadMessagesCount || undefined },
+            { to: '/messaging?channel=email', icon: Mail, label: 'Email', prefetch: undefined, badge: unreadEmailCount || undefined },
             { to: '/dashboard', icon: LayoutDashboard, label: 'Visão Geral', prefetch: 'dashboard' as const, badge: undefined },
             { to: '/boards', icon: KanbanSquare, label: 'Boards', prefetch: 'boards' as const, badge: undefined },
             { to: '/contacts', icon: Users, label: 'Contatos', prefetch: 'contacts' as const, badge: undefined },
