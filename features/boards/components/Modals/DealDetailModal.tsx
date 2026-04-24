@@ -170,6 +170,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const [emailSubject, setEmailSubject] = useState('');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [signatureType, setSignatureType] = useState<'client' | 'prospecting'>('client');
+  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -522,7 +523,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       className={
         isMobile
           ? 'bg-white dark:bg-dark-card border border-slate-200 dark:border-white/10 w-full h-[100dvh] flex flex-col overflow-hidden pb-[var(--app-safe-area-bottom,0px)]'
-          : `bg-white dark:bg-dark-card border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl w-full ${activeTab === 'email' ? 'max-w-6xl' : 'max-w-4xl'} h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200`
+          : `bg-white dark:bg-dark-card border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl w-full ${activeTab === 'email' ? 'max-w-7xl' : 'max-w-4xl'} h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200`
       }
     >
           {/* HEADER (Stage Bar + Won/Lost) */}
@@ -1414,70 +1415,84 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
 
                 {activeTab === 'email' && (
                   <>
-                    {/* LEFT: Timeline read-only */}
-                    <div className="w-80 shrink-0 border-r border-slate-200 dark:border-white/10 overflow-y-auto p-4 space-y-3">
+                    {/* COL 1: Timeline — notes & activities only */}
+                    <div className="w-52 shrink-0 border-r border-slate-200 dark:border-white/10 overflow-y-auto p-3 space-y-2">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Timeline</p>
-                      {dealNotes.length === 0 && dealActivities.length === 0 && emailMessages.length === 0 ? (
-                        <p className="text-sm text-slate-400 italic">Nenhuma atividade registrada.</p>
+                      {dealNotes.length === 0 && dealActivities.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">Sem atividades.</p>
                       ) : (
                         <>
-                          {emailMessages.map((msg) => {
-                            const content = msg.content as { subject?: string; text?: string };
-                            const isOut = msg.direction === 'outbound';
-                            return (
-                              <div key={msg.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-3">
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <Mail size={12} className={isOut ? 'text-primary-500 shrink-0' : 'text-emerald-500 shrink-0'} />
-                                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate flex-1">
-                                    {content?.subject || (isOut ? 'Email enviado' : 'Email recebido')}
-                                  </span>
-                                  <span className="text-xs text-slate-400 shrink-0">
-                                    {new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(msg.created_at))}
-                                  </span>
-                                </div>
-                                {content?.text && (
-                                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 pl-5">{content.text}</p>
-                                )}
-                                <div className="flex items-center justify-between mt-1.5 pl-5">
-                                  <span className={`text-[10px] font-medium ${isOut ? 'text-primary-400' : 'text-emerald-400'}`}>
-                                    {isOut ? '↑ Enviado' : '↓ Recebido'}
-                                  </span>
-                                  {isOut && msg.status && (
-                                    <span className="text-[10px] text-slate-400 capitalize">{msg.status}</span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
                           {dealNotes.map(note => (
-                            <div key={note.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-3">
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <FileText size={12} className="text-primary-500 shrink-0" />
-                                <span className="text-xs text-slate-400">
+                            <div key={note.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg p-2.5">
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <FileText size={11} className="text-primary-500 shrink-0" />
+                                <span className="text-[10px] text-slate-400">
                                   {new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(note.created_at))}
                                 </span>
                               </div>
-                              <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words select-text">{note.content}</p>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words line-clamp-3">{note.content}</p>
                             </div>
                           ))}
                           {dealActivities.map(activity => (
-                            <div key={activity.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-3">
-                              <div className="flex items-start gap-2 mb-1">
-                                <CheckCircle2 size={12} className={`shrink-0 mt-0.5 ${activity.completed ? 'text-emerald-500' : 'text-slate-400'}`} />
-                                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 select-text">{activity.title}</span>
+                            <div key={activity.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg p-2.5">
+                              <div className="flex items-start gap-1.5 mb-1">
+                                <CheckCircle2 size={11} className={`shrink-0 mt-0.5 ${activity.completed ? 'text-emerald-500' : 'text-slate-400'}`} />
+                                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 line-clamp-2">{activity.title}</span>
                               </div>
-                              {activity.description && (
-                                <p className="text-xs text-slate-600 dark:text-slate-400 pl-5 whitespace-pre-wrap select-text">{activity.description}</p>
-                              )}
                               {activity.date && (
-                                <p className="text-xs text-slate-400 pl-5 mt-1">
-                                  {PT_BR_DATE_FORMATTER.format(new Date(activity.date))}
-                                </p>
+                                <p className="text-[10px] text-slate-400 pl-4">{PT_BR_DATE_FORMATTER.format(new Date(activity.date))}</p>
                               )}
                             </div>
                           ))}
                         </>
                       )}
+                    </div>
+
+                    {/* COL 2: Email list */}
+                    <div className="w-64 shrink-0 border-r border-slate-200 dark:border-white/10 flex flex-col overflow-hidden">
+                      <div className="shrink-0 px-3 py-2.5 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Emails</p>
+                        <span className="text-[10px] text-slate-400">{emailMessages.length}</span>
+                      </div>
+                      <div className="flex-1 overflow-y-auto">
+                        {emailMessages.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-full gap-2 p-4">
+                            <Mail size={28} className="text-slate-300 dark:text-slate-600" />
+                            <p className="text-xs text-slate-400 text-center">Nenhum email ainda.<br/>Escreve e envia o primeiro.</p>
+                          </div>
+                        ) : (
+                          [...emailMessages].reverse().map((msg) => {
+                            const content = msg.content as { subject?: string; text?: string };
+                            const isOut = msg.direction === 'outbound';
+                            const isSelected = selectedEmailId === msg.id;
+                            return (
+                              <button
+                                key={msg.id}
+                                onClick={() => setSelectedEmailId(isSelected ? null : msg.id)}
+                                className={`w-full text-left px-3 py-3 border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors ${isSelected ? 'bg-primary-50 dark:bg-primary-900/20 border-l-2 border-l-primary-500' : ''}`}
+                              >
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <span className={`text-[10px] font-bold ${isOut ? 'text-primary-500' : 'text-emerald-500'}`}>
+                                    {isOut ? '↑ Enviado' : '↓ Recebido'}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 ml-auto shrink-0">
+                                    {new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(msg.created_at))}
+                                  </span>
+                                </div>
+                                <p className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">
+                                  {content?.subject || (isOut ? 'Sem assunto' : 'Email recebido')}
+                                </p>
+                                {content?.text && (
+                                  <p className="text-[11px] text-slate-400 truncate mt-0.5">{content.text}</p>
+                                )}
+                                {isOut && msg.status && (
+                                  <span className="text-[10px] text-slate-300 dark:text-slate-500 capitalize">{msg.status}</span>
+                                )}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
 
                     {/* RIGHT: Email compose */}
