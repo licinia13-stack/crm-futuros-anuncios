@@ -48,9 +48,10 @@ export async function POST(request: NextRequest) {
     const lock = await client.getMailboxLock('INBOX');
     try {
       const uids = await client.search({ seen: false }, { uid: true });
+      const uidList = Array.isArray(uids) ? uids : [];
 
-      if (uids.length > 0) {
-        for await (const msg of client.fetch(uids, { source: true, uid: true }, { uid: true })) {
+      if (uidList.length > 0) {
+        for await (const msg of client.fetch(uidList, { source: true, uid: true }, { uid: true })) {
           try {
             const parsed = await simpleParser(msg.source as Buffer);
 
