@@ -251,6 +251,7 @@ export class ResendEmailProvider extends BaseChannelProvider {
     const htmlContent = (content as { html?: string }).html;
     const ccField = (content as { cc?: string }).cc;
     const bccField = (content as { bcc?: string }).bcc;
+    const rawAttachments = (content as { attachments?: { name: string; content: string; type: string }[] }).attachments;
 
     // Always BCC the sender's own inbox as a backup copy
     const bccList = [...(bccField ? [bccField] : []), this.fromEmail];
@@ -274,6 +275,11 @@ export class ResendEmailProvider extends BaseChannelProvider {
         headers: replyToExternalId
           ? { 'In-Reply-To': replyToExternalId, References: replyToExternalId }
           : undefined,
+        attachments: rawAttachments?.map(a => ({
+          filename: a.name,
+          content: Buffer.from(a.content, 'base64'),
+          contentType: a.type,
+        })),
       });
 
       if (response.error) {

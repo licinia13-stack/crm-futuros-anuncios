@@ -63,6 +63,7 @@ import {
   Copy,
   Reply,
   CornerUpRight,
+  Paperclip,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { StageProgressBar } from '../StageProgressBar';
@@ -176,6 +177,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const [signatureType, setSignatureType] = useState<'client' | 'prospecting'>('client');
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [emailPreheader, setEmailPreheader] = useState('');
+  const [emailAttachments, setEmailAttachments] = useState<{ name: string; content: string; type: string; size: number }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const queryClient = useQueryClient();
   const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -340,6 +343,20 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
     setActiveTab('email');
   };
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const converted = await Promise.all(files.map(file => new Promise<{ name: string; content: string; type: string; size: number }>(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve({ name: file.name, content: result.split(',')[1], type: file.type || 'application/octet-stream', size: file.size });
+      };
+      reader.readAsDataURL(file);
+    })));
+    setEmailAttachments(prev => [...prev, ...converted]);
+    e.target.value = '';
+  };
+
   const handleReply = (msg: (typeof emailMessages)[0]) => {
     const vc = msg.content as { subject?: string; text?: string };
     const meta = msg.metadata as { from?: string } | null;
@@ -351,6 +368,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
     setEmailSubject(originalSubject.toUpperCase().startsWith('RE:') ? originalSubject : `RE: ${originalSubject}`);
     setEmailDraft(`\n\n---\nEm ${dateStr}, ${senderEmail} escreveu:\n${vc?.text || ''}`);
     setEmailPreheader('');
+    setEmailAttachments([]);
     setSelectedEmailId(null);
   };
 
@@ -364,6 +382,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
     setEmailSubject(originalSubject.toUpperCase().startsWith('FW:') ? originalSubject : `FW: ${originalSubject}`);
     setEmailDraft(`\n\n---\n---------- Mensagem reencaminhada ----------\nDe: ${meta?.from || ''}\nData: ${dateStr}\nAssunto: ${originalSubject}\n\n${vc?.text || ''}`);
     setEmailPreheader('');
+    setEmailAttachments([]);
     setSelectedEmailId(null);
   };
 
@@ -406,6 +425,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
             subject: emailSubject || undefined,
             cc: emailCc.trim() || undefined,
             bcc: emailBcc.trim() || undefined,
+            attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
           },
         }),
       });
@@ -419,6 +439,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       setEmailCc('');
       setEmailBcc('');
       setEmailPreheader('');
+      setEmailAttachments([]);
       queryClient.invalidateQueries({ queryKey: emailMessagesQueryKey });
     } catch (err: unknown) {
       addToast(err instanceof Error ? err.message : 'Erro ao enviar email', 'error');
@@ -1684,6 +1705,22 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                           className="flex-1 min-h-[220px] w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                         />
 
+                        {/* Attachments list */}
+                        {emailAttachments.length > 0 && (
+                          <div className="shrink-0 flex flex-wrap gap-2">
+                            {emailAttachments.map((att, i) => (
+                              <div key={i} className="flex items-center gap-1.5 bg-slate-100 dark:bg-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-200">
+                                <Paperclip size={11} className="text-slate-400 shrink-0" />
+                                <span className="max-w-[140px] truncate">{att.name}</span>
+                                <span className="text-slate-400 shrink-0">({(att.size / 1024).toFixed(0)}KB)</span>
+                                <button onClick={() => setEmailAttachments(prev => prev.filter((_, j) => j !== i))} className="ml-1 text-slate-400 hover:text-red-500 transition-colors">
+                                  <X size={11} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         {/* Signature preview */}
                         <div className="shrink-0 pt-1">
                           <div className="flex items-center justify-between mb-2">
@@ -1712,10 +1749,19 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
 
                       {/* Footer */}
                       <div className="shrink-0 border-t border-slate-200 dark:border-white/10 px-6 py-4 flex items-center justify-between bg-white dark:bg-dark-card">
+                        <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
                         {!emailChannel && (
                           <p className="text-xs text-amber-600 dark:text-amber-400">Nenhum canal de email configurado.</p>
                         )}
-                        {emailChannel && <div />}
+                        {emailChannel && (
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-700 dark:hover:text-white transition-colors"
+                            title="Anexar ficheiro"
+                          >
+                            <Paperclip size={14} /> Anexar
+                          </button>
+                        )}
                         <button
                           onClick={handleSendEmail}
                           disabled={isSendingEmail || !emailChannel || !emailTo.trim() || !emailDraft?.trim()}
