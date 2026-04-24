@@ -24,7 +24,7 @@
  * ```
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -117,6 +117,7 @@ const NavItem = ({
   clickedPath,
   onItemClick,
   badge,
+  channelParam,
 }: {
   to: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
@@ -125,16 +126,12 @@ const NavItem = ({
   clickedPath?: string;
   onItemClick?: (path: string) => void;
   badge?: number;
+  channelParam?: string | null;
 }) => {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const isActive = (() => {
-    if (to === '/messaging?channel=email') {
-      return pathname === '/messaging' && searchParams.get('channel') === 'email';
-    }
-    if (to === '/messaging') {
-      return pathname === '/messaging' && !searchParams.get('channel');
-    }
+    if (to === '/messaging?channel=email') return pathname === '/messaging' && channelParam === 'email';
+    if (to === '/messaging') return pathname === '/messaging' && channelParam !== 'email';
     return pathname === to || (to === '/boards' && pathname === '/pipeline');
   })();
   const wasJustClicked = clickedPath === to;
@@ -281,7 +278,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <SkipLink targetId="main-content" />
 
       {/* Tablet rail (shows full icon set; no "More" sheet needed) */}
-      {isTablet ? <NavigationRail /> : null}
+      {isTablet ? <Suspense fallback={null}><NavigationRail /></Suspense> : null}
 
       {/* Sidebar - Collapsible */}
       {isDesktop ? (
@@ -375,6 +372,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 clickedPath={clickedPath}
                 onItemClick={setClickedPath}
                 badge={item.badge}
+                channelParam={channelParam}
               />
             );
           })}
@@ -559,7 +557,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </div>
 
       {/* Mobile app shell */}
-      <BottomNav onOpenMore={() => setIsMoreOpen(true)} />
+      <Suspense fallback={null}><BottomNav onOpenMore={() => setIsMoreOpen(true)} /></Suspense>
       <MoreMenuSheet isOpen={isMoreOpen} onClose={() => setIsMoreOpen(false)} />
     </div>
   );

@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, Suspense } from 'react'
 
 import { QueryProvider } from '@/lib/query'
 import { ToastProvider } from '@/context/ToastContext'
@@ -66,7 +66,7 @@ export default function ProtectedShell({
                     <AuthProvider>
                         <AIProvider>
                             <TooltipProvider delayDuration={200}>
-                                {shouldUseAppShell ? <Layout>{children}</Layout> : children}
+                                {shouldUseAppShell ? <Suspense fallback={null}><Layout>{children}</Layout></Suspense> : children}
                             </TooltipProvider>
                         </AIProvider>
                     </AuthProvider>
