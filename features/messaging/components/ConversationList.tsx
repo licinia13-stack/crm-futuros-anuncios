@@ -42,6 +42,7 @@ interface ConversationListProps {
   businessUnitId?: string;
   getPresence?: (contactId: string) => 'online' | 'typing' | 'recording' | 'offline';
   initialChannelFilter?: ChannelType | 'all';
+  excludeChannelType?: ChannelType;
   onOpenCompose?: () => void;
 }
 
@@ -59,6 +60,7 @@ export const ConversationList = memo(function ConversationList({
   businessUnitId,
   getPresence,
   initialChannelFilter,
+  excludeChannelType,
   onOpenCompose,
 }: ConversationListProps) {
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('open');
@@ -76,16 +78,11 @@ export const ConversationList = memo(function ConversationList({
     businessUnitId,
     search: searchQuery || undefined,
     channelType: channelFilter !== 'all' ? channelFilter : undefined,
+    excludeChannelType: channelFilter === 'all' ? excludeChannelType : undefined,
     hasUnread: showUnreadOnly || undefined,
-  }), [statusFilter, businessUnitId, searchQuery, channelFilter, showUnreadOnly]);
+  }), [statusFilter, businessUnitId, searchQuery, channelFilter, showUnreadOnly, excludeChannelType]);
 
-  const { data: rawConversations, isLoading, error } = useConversations(filters);
-
-  // Email conversations are managed from the deal modal — exclude from the "all" view
-  const conversations = useMemo(
-    () => channelFilter === 'all' ? rawConversations?.filter(c => c.channelType !== 'email') : rawConversations,
-    [rawConversations, channelFilter]
-  );
+  const { data: conversations, isLoading, error } = useConversations(filters);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;

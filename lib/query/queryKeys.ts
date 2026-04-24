@@ -84,6 +84,7 @@ export const queryKeys = {
             filters?.status ?? null,
             filters?.channelId ?? null,
             filters?.channelType ?? null,
+            filters?.excludeChannelType ?? null,
             filters?.businessUnitId ?? null,
             filters?.assignedUserId ?? null,
             filters?.hasUnread ?? null,

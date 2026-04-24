@@ -438,6 +438,7 @@ export interface ConversationFilters {
   status?: ConversationStatus | 'all';
   channelId?: string;
   channelType?: ChannelType;
+  excludeChannelType?: ChannelType;
   businessUnitId?: string;
   assignedUserId?: string | 'unassigned';
   hasUnread?: boolean;

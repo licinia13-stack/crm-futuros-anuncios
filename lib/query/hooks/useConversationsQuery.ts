@@ -119,6 +119,14 @@ export function useConversations(filters?: ConversationFilters) {
         const ids = (channelIds || []).map((c: { id: string }) => c.id);
         if (ids.length === 0) return [];
         query = query.in('channel_id', ids);
+      } else if (filters?.excludeChannelType) {
+        // Exclude a specific channel type (e.g. exclude email from Mensagens)
+        const { data: excludedIds } = await supabase
+          .from('messaging_channels')
+          .select('id')
+          .eq('channel_type', filters.excludeChannelType);
+        const ids = (excludedIds || []).map((c: { id: string }) => c.id);
+        if (ids.length > 0) query = query.not('channel_id', 'in', `(${ids.join(',')})`);
       }
       if (filters?.businessUnitId) {
         query = query.eq('business_unit_id', filters.businessUnitId);
