@@ -59,6 +59,7 @@ import {
   MapPin,
   Globe,
   ExternalLink,
+  ChevronLeft,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { StageProgressBar } from '../StageProgressBar';
@@ -1495,8 +1496,52 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                       </div>
                     </div>
 
-                    {/* RIGHT: Email compose */}
+                    {/* COL 3: Email viewer OR compose */}
                     <div className="flex-1 flex flex-col overflow-hidden">
+                      {(() => {
+                        const viewMsg = selectedEmailId ? emailMessages.find(m => m.id === selectedEmailId) : null;
+                        if (viewMsg) {
+                          const vc = viewMsg.content as { subject?: string; text?: string; html?: string };
+                          const isOut = viewMsg.direction === 'outbound';
+                          return (
+                            <>
+                              {/* Viewer header */}
+                              <div className="shrink-0 px-6 pt-4 pb-3 border-b border-slate-200 dark:border-white/10 flex items-center gap-3">
+                                <button
+                                  onClick={() => setSelectedEmailId(null)}
+                                  className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500 hover:text-slate-700 dark:hover:text-white transition-colors"
+                                  title="Novo email"
+                                >
+                                  <ChevronLeft size={16} />
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                                    {vc?.subject || (isOut ? 'Sem assunto' : 'Email recebido')}
+                                  </h3>
+                                  <p className="text-xs text-slate-400 mt-0.5">
+                                    {isOut ? '↑ Enviado' : '↓ Recebido'} · {new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(viewMsg.created_at))}
+                                    {isOut && viewMsg.status && <span className="ml-2 capitalize text-slate-300">· {viewMsg.status}</span>}
+                                  </p>
+                                </div>
+                              </div>
+                              {/* Viewer body */}
+                              <div className="flex-1 overflow-y-auto px-6 py-4">
+                                {vc?.html ? (
+                                  <div
+                                    className="prose prose-sm max-w-none dark:prose-invert text-slate-700 dark:text-slate-300"
+                                    dangerouslySetInnerHTML={{ __html: vc.html }}
+                                  />
+                                ) : (
+                                  <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{vc?.text}</p>
+                                )}
+                              </div>
+                            </>
+                          );
+                        }
+                        return null;
+                      })()}
+                      {/* Compose — hidden when viewing an email */}
+                      <div className={`flex-1 flex flex-col overflow-hidden ${selectedEmailId ? 'hidden' : ''}`}>
                       {/* Fixed fields: Para/CC/BCC/Assunto */}
                       <div className="shrink-0 px-6 pt-6 pb-3 space-y-2 border-b border-slate-200 dark:border-white/10">
                         <div className="space-y-2">
@@ -1612,7 +1657,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                           )}
                         </button>
                       </div>
-                    </div>
+                      </div>{/* end compose inner */}
+                    </div>{/* end COL 3 */}
                   </>
                 )}
 
