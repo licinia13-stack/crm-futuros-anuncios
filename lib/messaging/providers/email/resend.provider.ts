@@ -252,6 +252,15 @@ export class ResendEmailProvider extends BaseChannelProvider {
     const ccField = (content as { cc?: string }).cc;
     const bccField = (content as { bcc?: string }).bcc;
 
+    // Always BCC the sender's own inbox as a backup copy
+    const bccList = [...(bccField ? [bccField] : []), this.fromEmail];
+
+    // Build conversation-specific Reply-To so inbound replies are matched automatically
+    const inboundDomain = process.env.INBOUND_EMAIL_DOMAIN;
+    const conversationReplyTo = inboundDomain && params.conversationId
+      ? `reply+${params.conversationId}@${inboundDomain}`
+      : (this.replyTo || undefined);
+
     try {
       const response = await this.client!.emails.send({
         from: `${this.fromName} <${this.fromEmail}>`,
@@ -260,8 +269,8 @@ export class ResendEmailProvider extends BaseChannelProvider {
         text: textContent,
         html: htmlContent,
         cc: ccField ? [ccField] : undefined,
-        bcc: bccField ? [bccField] : undefined,
-        replyTo: this.replyTo,
+        bcc: bccList,
+        replyTo: conversationReplyTo,
         headers: replyToExternalId
           ? { 'In-Reply-To': replyToExternalId, References: replyToExternalId }
           : undefined,
