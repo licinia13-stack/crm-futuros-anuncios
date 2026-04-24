@@ -1562,7 +1562,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                     </div>
 
                     {/* COL 3: Email viewer OR compose */}
-                    <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
                       {(() => {
                         const viewMsg = selectedEmailId ? emailMessages.find(m => m.id === selectedEmailId) : null;
                         if (viewMsg) {
@@ -1740,13 +1740,10 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                               </button>
                             </div>
                           </div>
-                          <div className="rounded-xl overflow-hidden bg-white" style={{ maxHeight: '160px', overflowY: 'auto' }}>
-                            <div
-                              className="pointer-events-none select-none"
-                              style={{ transform: 'scale(0.72)', transformOrigin: 'top left', width: '139%' }}
-                              dangerouslySetInnerHTML={{ __html: signatureType === 'prospecting' ? EMAIL_SIGNATURE_PLAIN : EMAIL_SIGNATURE_HTML }}
-                            />
-                          </div>
+                          <div
+                            className={`rounded-xl overflow-hidden pointer-events-none select-none opacity-80 ${signatureType === 'prospecting' ? 'bg-white p-3' : ''}`}
+                            dangerouslySetInnerHTML={{ __html: signatureType === 'prospecting' ? EMAIL_SIGNATURE_PLAIN : EMAIL_SIGNATURE_HTML }}
+                          />
                         </div>
                       </div>
 
