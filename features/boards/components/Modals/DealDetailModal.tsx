@@ -60,6 +60,7 @@ import {
   Globe,
   ExternalLink,
   ChevronLeft,
+  ChevronRight,
   Copy,
   Reply,
   CornerUpRight,
@@ -169,6 +170,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const [emailDraft, setEmailDraft] = useState<string | null>(null);
   const [newNote, setNewNote] = useState('');
   const [activeTab, setActiveTab] = useState<'timeline' | 'products' | 'info' | 'email'>('timeline');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [emailTo, setEmailTo] = useState('');
   const [emailCc, setEmailCc] = useState('');
   const [emailBcc, setEmailBcc] = useState('');
@@ -798,7 +800,33 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
 
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
             {/* Left Sidebar (Static Info + Custom Fields) */}
-            <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 dark:border-white/5 p-4 sm:p-6 overflow-y-auto bg-white dark:bg-dark-card max-h-[38vh] md:max-h-none">
+            <div className={`${activeTab === 'email' && sidebarCollapsed ? 'w-10 shrink-0' : 'w-full md:w-1/3'} border-b md:border-b-0 md:border-r border-slate-200 dark:border-white/5 bg-white dark:bg-dark-card max-h-[38vh] md:max-h-none flex flex-col transition-all duration-200`}>
+              {activeTab === 'email' && sidebarCollapsed ? (
+                <div className="flex flex-col items-center py-4 gap-3 h-full">
+                  <button
+                    onClick={() => setSidebarCollapsed(false)}
+                    className="text-slate-400 hover:text-primary-500 transition-colors"
+                    title="Expandir"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider" style={{ writingMode: 'vertical-lr', transform: 'rotate(180deg)' }}>
+                    Empresa (Conta)
+                  </span>
+                </div>
+              ) : (
+              <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+              {activeTab === 'email' && (
+                <div className="flex justify-end mb-2">
+                  <button
+                    onClick={() => setSidebarCollapsed(true)}
+                    className="text-slate-400 hover:text-primary-500 transition-colors"
+                    title="Minimizar"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                </div>
+              )}
               <div className="space-y-6">
                 <div>
                   <h3 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2">
@@ -1065,6 +1093,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                   </div>
                 )}
               </div>
+            </div>
+            )}
             </div>
 
             {/* Right Content (Tabs & Timeline) */}
