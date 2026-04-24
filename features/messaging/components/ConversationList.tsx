@@ -70,8 +70,22 @@ export const ConversationList = memo(function ConversationList({
   useEffect(() => {
     setChannelFilter(initialChannelFilter ?? 'all');
   }, [initialChannelFilter]);
+
+  // If the active channel filter is the excluded type, reset it to 'all'
+  useEffect(() => {
+    if (excludeChannelType && channelFilter === excludeChannelType) {
+      setChannelFilter('all');
+    }
+  }, [excludeChannelType, channelFilter]);
+
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Remove the excluded channel from the filter options so it can't be selected
+  const availableChannelOptions = useMemo(
+    () => CHANNEL_OPTIONS.filter((ch) => ch.id !== excludeChannelType),
+    [excludeChannelType]
+  );
 
   const filters: ConversationFilters = useMemo(() => ({
     status: statusFilter,
@@ -194,7 +208,7 @@ export const ConversationList = memo(function ConversationList({
                 Canal
               </label>
               <div className="flex flex-wrap gap-1.5">
-                {CHANNEL_OPTIONS.map((channel) => (
+                {availableChannelOptions.map((channel) => (
                   <button
                     key={channel.id}
                     type="button"
