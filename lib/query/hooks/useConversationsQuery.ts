@@ -13,7 +13,6 @@ import {
   useQuery,
   useMutation,
   useQueryClient,
-  keepPreviousData,
 } from '@tanstack/react-query';
 import { queryKeys } from '../index';
 import { supabase } from '@/lib/supabase';
@@ -180,7 +179,6 @@ export function useConversations(filters?: ConversationFilters) {
     },
     staleTime: 30 * 1000, // 30 seconds
     enabled: !authLoading && !!user && !!profile?.organization_id,
-    placeholderData: keepPreviousData,
     // Filter out conversations being deleted so stale refetches from other
     // mutations (e.g. markAsRead.onSettled) can't re-add them while the
     // delete mutation is in-flight.
