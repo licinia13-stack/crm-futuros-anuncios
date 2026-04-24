@@ -109,6 +109,16 @@ export function useConversations(filters?: ConversationFilters) {
       }
       if (filters?.channelId) {
         query = query.eq('channel_id', filters.channelId);
+      } else if (filters?.channelType) {
+        // Filter by channel type via a subquery on channel IDs — applied in SQL so
+        // keepPreviousData never leaks conversations from other channels.
+        const { data: channelIds } = await supabase
+          .from('messaging_channels')
+          .select('id')
+          .eq('channel_type', filters.channelType);
+        const ids = (channelIds || []).map((c: { id: string }) => c.id);
+        if (ids.length === 0) return [];
+        query = query.in('channel_id', ids);
       }
       if (filters?.businessUnitId) {
         query = query.eq('business_unit_id', filters.businessUnitId);
