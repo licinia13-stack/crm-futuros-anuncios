@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { PRIMARY_NAV, SECONDARY_NAV } from './navConfig';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -13,12 +13,20 @@ export interface NavigationRailProps {
 
 export function NavigationRail({ onOpenMore }: NavigationRailProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const prefetch = usePrefetchRoute();
 
-  const isHrefActive = (href: string) =>
-    pathname === href ||
-    (href === '/boards' && pathname === '/pipeline') ||
-    (href === '/pipeline' && pathname === '/boards');
+  const isHrefActive = (href: string) => {
+    if (href === '/messaging?channel=email') {
+      return pathname === '/messaging' && searchParams.get('channel') === 'email';
+    }
+    if (href === '/messaging') {
+      return pathname === '/messaging' && searchParams.get('channel') !== 'email';
+    }
+    return pathname === href ||
+      (href === '/boards' && pathname === '/pipeline') ||
+      (href === '/pipeline' && pathname === '/boards');
+  };
 
   return (
     <nav
@@ -31,8 +39,8 @@ export function NavigationRail({ onOpenMore }: NavigationRailProps) {
       )}
     >
       <div className="flex flex-col items-center gap-2 py-4">
-        <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary-500/20">
-          N
+        <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-primary-500/20">
+          FA
         </div>
       </div>
 

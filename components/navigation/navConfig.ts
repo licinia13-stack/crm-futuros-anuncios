@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import {
   Inbox,
   MessageSquare,
+  Mail,
   KanbanSquare,
   Users,
   CheckSquare,
@@ -12,7 +13,7 @@ import {
   User,
 } from 'lucide-react';
 
-export type PrimaryNavId = 'inbox' | 'messaging' | 'boards' | 'contacts' | 'activities' | 'more';
+export type PrimaryNavId = 'inbox' | 'messaging' | 'email' | 'boards' | 'contacts' | 'activities' | 'more';
 
 export interface PrimaryNavItem {
   id: PrimaryNavId;
@@ -25,6 +26,7 @@ export interface PrimaryNavItem {
 export const PRIMARY_NAV: PrimaryNavItem[] = [
   { id: 'inbox', label: 'Inbox', href: '/inbox', icon: Inbox },
   { id: 'messaging', label: 'Mensagens', href: '/messaging', icon: MessageSquare },
+  { id: 'email', label: 'Email', href: '/messaging?channel=email', icon: Mail },
   { id: 'boards', label: 'Boards', href: '/boards', icon: KanbanSquare },
   { id: 'contacts', label: 'Contatos', href: '/contacts', icon: Users },
   { id: 'activities', label: 'Atividades', href: '/activities', icon: CheckSquare },

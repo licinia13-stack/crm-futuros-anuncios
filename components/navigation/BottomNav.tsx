@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
 import { PRIMARY_NAV } from './navConfig';
 
@@ -10,6 +10,7 @@ export interface BottomNavProps {
 
 export function BottomNav({ onOpenMore }: BottomNavProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   return (
     <nav
@@ -23,10 +24,16 @@ export function BottomNav({ onOpenMore }: BottomNavProps) {
     >
       <div className="mx-auto flex h-[var(--app-bottom-nav-height,56px)] max-w-screen-sm items-stretch">
         {PRIMARY_NAV.map((item) => {
-          const isActive =
-            item.href
-              ? pathname === item.href || (item.href === '/boards' && pathname === '/pipeline')
-              : false;
+          const isActive = (() => {
+            if (!item.href) return false;
+            if (item.href === '/messaging?channel=email') {
+              return pathname === '/messaging' && searchParams.get('channel') === 'email';
+            }
+            if (item.href === '/messaging') {
+              return pathname === '/messaging' && searchParams.get('channel') !== 'email';
+            }
+            return pathname === item.href || (item.href === '/boards' && pathname === '/pipeline');
+          })();
 
           const Icon = item.icon;
 

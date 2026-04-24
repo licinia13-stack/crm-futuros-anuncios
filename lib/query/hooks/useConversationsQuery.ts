@@ -119,13 +119,15 @@ export function useConversations(filters?: ConversationFilters) {
         if (ids.length === 0) return [];
         query = query.in('channel_id', ids);
       } else if (filters?.excludeChannelType) {
-        // Exclude a specific channel type (e.g. exclude email from Mensagens)
-        const { data: excludedIds } = await supabase
+        // Fetch allowed channel IDs (those NOT of the excluded type) and use .in()
+        // — safer than .not('channel_id', 'in', ...) which has PostgREST formatting quirks.
+        const { data: allowedChannels } = await supabase
           .from('messaging_channels')
           .select('id')
-          .eq('channel_type', filters.excludeChannelType);
-        const ids = (excludedIds || []).map((c: { id: string }) => c.id);
-        if (ids.length > 0) query = query.not('channel_id', 'in', `(${ids.join(',')})`);
+          .neq('channel_type', filters.excludeChannelType);
+        const ids = (allowedChannels || []).map((c: { id: string }) => c.id);
+        if (ids.length === 0) return [];
+        query = query.in('channel_id', ids);
       }
       if (filters?.businessUnitId) {
         query = query.eq('business_unit_id', filters.businessUnitId);
@@ -174,6 +176,9 @@ export function useConversations(filters?: ConversationFilters) {
 
       if (filters?.channelType) {
         return result.filter((conv) => conv.channelType === filters.channelType);
+      }
+      if (filters?.excludeChannelType) {
+        return result.filter((conv) => conv.channelType !== filters.excludeChannelType);
       }
       return result;
     },
