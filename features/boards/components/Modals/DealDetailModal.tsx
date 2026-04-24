@@ -61,6 +61,8 @@ import {
   ExternalLink,
   ChevronLeft,
   Copy,
+  Reply,
+  CornerUpRight,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { StageProgressBar } from '../StageProgressBar';
@@ -173,6 +175,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [signatureType, setSignatureType] = useState<'client' | 'prospecting'>('client');
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+  const [emailPreheader, setEmailPreheader] = useState('');
   const queryClient = useQueryClient();
   const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -337,6 +340,33 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
     setActiveTab('email');
   };
 
+  const handleReply = (msg: (typeof emailMessages)[0]) => {
+    const vc = msg.content as { subject?: string; text?: string };
+    const meta = msg.metadata as { from?: string } | null;
+    const senderEmail = meta?.from || '';
+    const originalSubject = vc?.subject || '';
+    const dateStr = new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(msg.created_at));
+    setEmailTo(senderEmail);
+    setEmailCc('');
+    setEmailSubject(originalSubject.toUpperCase().startsWith('RE:') ? originalSubject : `RE: ${originalSubject}`);
+    setEmailDraft(`\n\n---\nEm ${dateStr}, ${senderEmail} escreveu:\n${vc?.text || ''}`);
+    setEmailPreheader('');
+    setSelectedEmailId(null);
+  };
+
+  const handleForward = (msg: (typeof emailMessages)[0]) => {
+    const vc = msg.content as { subject?: string; text?: string };
+    const meta = msg.metadata as { from?: string } | null;
+    const originalSubject = vc?.subject || '';
+    const dateStr = new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(msg.created_at));
+    setEmailTo('');
+    setEmailCc('');
+    setEmailSubject(originalSubject.toUpperCase().startsWith('FW:') ? originalSubject : `FW: ${originalSubject}`);
+    setEmailDraft(`\n\n---\n---------- Mensagem reencaminhada ----------\nDe: ${meta?.from || ''}\nData: ${dateStr}\nAssunto: ${originalSubject}\n\n${vc?.text || ''}`);
+    setEmailPreheader('');
+    setSelectedEmailId(null);
+  };
+
   const handleSendEmail = async () => {
     if (!emailChannel) {
       addToast('Nenhum canal de email configurado. Configure nas Definições → Canais.', 'error');
@@ -360,7 +390,10 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       if (!conversationId) throw new Error(convData.error || 'Erro ao criar conversa');
 
       const sig = signatureType === 'prospecting' ? EMAIL_SIGNATURE_PLAIN : EMAIL_SIGNATURE_HTML;
-      const htmlBody = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${emailDraft.replace(/\n/g, '<br>')}</div><br><br>${sig}`;
+      const preheaderHtml = emailPreheader.trim()
+        ? `<span style="display:none;max-height:0;overflow:hidden;opacity:0;font-size:1px;">${emailPreheader.trim()}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</span>`
+        : '';
+      const htmlBody = `${preheaderHtml}<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${emailDraft.replace(/\n/g, '<br>')}</div><br><br>${sig}`;
       const msgRes = await fetch('/api/messaging/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -385,6 +418,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       setEmailSubject('');
       setEmailCc('');
       setEmailBcc('');
+      setEmailPreheader('');
       queryClient.invalidateQueries({ queryKey: emailMessagesQueryKey });
     } catch (err: unknown) {
       addToast(err instanceof Error ? err.message : 'Erro ao enviar email', 'error');
@@ -1545,6 +1579,23 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                                   <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{vc?.text}</p>
                                 )}
                               </div>
+                              {/* Actions: Reply / Forward */}
+                              <div className="shrink-0 px-6 py-3 border-t border-slate-200 dark:border-white/10 flex gap-2">
+                                {!isOut && (
+                                  <button
+                                    onClick={() => handleReply(viewMsg)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-700 dark:text-slate-200 transition-colors"
+                                  >
+                                    <Reply size={13} /> Responder
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleForward(viewMsg)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-700 dark:text-slate-200 transition-colors"
+                                >
+                                  <CornerUpRight size={13} /> Reencaminhar
+                                </button>
+                              </div>
                             </>
                           );
                         }
@@ -1593,6 +1644,16 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                             value={emailSubject}
                             onChange={e => setEmailSubject(e.target.value)}
                             placeholder="Proposta comercial..."
+                            className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 pt-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-16 shrink-0 leading-tight" title="Texto invisível que aparece na prévia da caixa de entrada">Prévia</label>
+                          <input
+                            type="text"
+                            value={emailPreheader}
+                            onChange={e => setEmailPreheader(e.target.value)}
+                            placeholder="Texto que aparece na prévia da caixa de entrada..."
                             className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
                           />
                         </div>
