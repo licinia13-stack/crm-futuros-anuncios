@@ -253,7 +253,7 @@ export function useUnreadCount(options?: { channelType?: string; excludeChannelT
 
       if (error) throw error;
 
-      const rows = (data || []) as { channel: { channel_type: string } | null }[];
+      const rows = (data || []) as unknown as { channel: { channel_type: string } | null }[];
 
       if (options?.channelType) {
         return rows.filter(r => r.channel?.channel_type === options.channelType).length;
