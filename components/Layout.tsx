@@ -27,7 +27,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   KanbanSquare,
@@ -127,7 +127,16 @@ const NavItem = ({
   badge?: number;
 }) => {
   const pathname = usePathname();
-  const isActive = pathname === to || (to === '/boards' && pathname === '/pipeline');
+  const searchParams = useSearchParams();
+  const isActive = (() => {
+    if (to === '/messaging?channel=email') {
+      return pathname === '/messaging' && searchParams.get('channel') === 'email';
+    }
+    if (to === '/messaging') {
+      return pathname === '/messaging' && !searchParams.get('channel');
+    }
+    return pathname === to || (to === '/boards' && pathname === '/pipeline');
+  })();
   const wasJustClicked = clickedPath === to;
 
   // If user clicked on a DIFFERENT item, immediately deactivate this one
@@ -176,6 +185,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, loading, profile, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const channelParam = searchParams.get('channel');
   const { mode } = useResponsiveMode();
   const isMobile = mode === 'mobile';
   const isTablet = mode === 'tablet';
@@ -323,7 +334,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                         onMouseEnter={() => item.prefetch && prefetchRoute(item.prefetch)}
                         onClick={() => setClickedPath(item.to)}
                         className={(() => {
-                          const isActive = pathname === item.to || (item.to === '/boards' && pathname === '/pipeline');
+                          const isActive = (() => {
+                            if (item.to === '/messaging?channel=email') return pathname === '/messaging' && channelParam === 'email';
+                            if (item.to === '/messaging') return pathname === '/messaging' && channelParam !== 'email';
+                            return pathname === item.to || (item.to === '/boards' && pathname === '/pipeline');
+                          })();
                           const wasJustClicked = clickedPath === item.to;
                           // If user clicked on a DIFFERENT item, immediately deactivate this one
                           const anotherItemWasClicked = clickedPath && clickedPath !== item.to;
@@ -478,7 +493,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           {/* Header */}
           <header className="h-16 glass border-b border-[var(--color-border-subtle)] flex items-center justify-between px-6 z-40 shrink-0" role="banner">
             <h1 className="text-lg font-semibold font-display text-slate-900 dark:text-white">
-              {getPageTitle(pathname)}
+              {getPageTitle(channelParam ? `${pathname}?channel=${channelParam}` : pathname)}
             </h1>
             <div className="flex items-center gap-4">
               <button
