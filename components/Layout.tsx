@@ -242,20 +242,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   // Track the last clicked menu item to maintain highlight during Suspense transitions
   const [clickedPath, setClickedPath] = useState<string | undefined>(undefined);
 
-  // Clear clickedPath only when the clicked route actually becomes active
+  // Clear clickedPath only when the clicked route actually becomes active.
+  // Must account for query-string routes like /messaging?channel=email,
+  // because usePathname() never includes the query string.
   React.useEffect(() => {
-    if (clickedPath) {
-      // Check if the clicked path is now the active route (or its alias)
-      const isNowActive = pathname === clickedPath ||
-        (clickedPath === '/boards' && pathname === '/pipeline') ||
-        (clickedPath === '/pipeline' && pathname === '/boards');
-
-      if (isNowActive) {
-        // Route is now active, safe to clear the "clicked" state
-        setClickedPath(undefined);
-      }
-    }
-  }, [pathname, clickedPath]);
+    if (!clickedPath) return;
+    const [clickedBase, clickedQuery] = clickedPath.split('?');
+    const clickedChannel = clickedQuery ? new URLSearchParams(clickedQuery).get('channel') : null;
+    const isNowActive =
+      (pathname === clickedBase && channelParam === clickedChannel) ||
+      (clickedPath === '/boards' && pathname === '/pipeline') ||
+      (clickedPath === '/pipeline' && pathname === '/boards');
+    if (isNowActive) setClickedPath(undefined);
+  }, [pathname, clickedPath, channelParam]);
 
   const toggleDebugMode = () => {
     if (debugEnabled) {
