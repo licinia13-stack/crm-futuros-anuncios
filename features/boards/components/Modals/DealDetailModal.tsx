@@ -60,6 +60,7 @@ import {
   Globe,
   ExternalLink,
   ChevronLeft,
+  Copy,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { StageProgressBar } from '../StageProgressBar';
@@ -1419,7 +1420,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                 {activeTab === 'email' && (
                   <>
                     {/* COL 1: Timeline — notes & activities only */}
-                    <div className="w-52 shrink-0 border-r border-slate-200 dark:border-white/10 overflow-y-auto p-3 space-y-2">
+                    <div className="w-72 shrink-0 border-r border-slate-200 dark:border-white/10 overflow-y-auto p-3 space-y-2">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Timeline</p>
                       {dealNotes.length === 0 && dealActivities.length === 0 ? (
                         <p className="text-xs text-slate-400 italic">Sem atividades.</p>
@@ -1429,11 +1430,18 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                             <div key={note.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg p-2.5">
                               <div className="flex items-center gap-1.5 mb-1">
                                 <FileText size={11} className="text-primary-500 shrink-0" />
-                                <span className="text-[10px] text-slate-400">
+                                <span className="text-[10px] text-slate-400 flex-1">
                                   {new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(note.created_at))}
                                 </span>
+                                <button
+                                  onClick={() => navigator.clipboard.writeText(note.content)}
+                                  className="text-[10px] text-slate-400 hover:text-primary-500 transition-colors px-1"
+                                  title="Copiar nota"
+                                >
+                                  <Copy size={11} />
+                                </button>
                               </div>
-                              <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words line-clamp-3">{note.content}</p>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words">{note.content}</p>
                             </div>
                           ))}
                           {dealActivities.map(activity => (
