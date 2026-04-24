@@ -79,7 +79,13 @@ export const ConversationList = memo(function ConversationList({
     hasUnread: showUnreadOnly || undefined,
   }), [statusFilter, businessUnitId, searchQuery, channelFilter, showUnreadOnly]);
 
-  const { data: conversations, isLoading, error } = useConversations(filters);
+  const { data: rawConversations, isLoading, error } = useConversations(filters);
+
+  // Email conversations are managed from the deal modal — exclude from the "all" view
+  const conversations = useMemo(
+    () => channelFilter === 'all' ? rawConversations?.filter(c => c.channelType !== 'email') : rawConversations,
+    [rawConversations, channelFilter]
+  );
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
